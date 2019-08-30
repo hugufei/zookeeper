@@ -101,6 +101,7 @@ public final class StaticHostProvider implements HostProvider {
         }
 
         this.serverAddresses.addAll(serverAddresses);
+        // 打乱顺序
         Collections.shuffle(this.serverAddresses);
     }
 

@@ -688,6 +688,7 @@ public class ZooKeeperMain {
         
         if (cmd.equals("create") && args.length >= 3) {
             int first = 0;
+            // 构造CreateMode,从参数里面解析出节点类型
             CreateMode flags = CreateMode.PERSISTENT;
             if ((args[1].equals("-e") && args[2].equals("-s"))
                     || (args[1]).equals("-s") && (args[2].equals("-e"))) {
