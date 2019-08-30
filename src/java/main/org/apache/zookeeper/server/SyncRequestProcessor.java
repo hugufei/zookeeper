@@ -123,12 +123,13 @@ public class SyncRequestProcessor extends ZooKeeperCriticalThread implements Req
             setRandRoll(r.nextInt(snapCount/2));
             while (true) {
                 Request si = null;
-                if (toFlush.isEmpty()) {
-                    si = queuedRequests.take();
+                if (toFlush.isEmpty()) { //没有要刷到磁盘的请求
+                    si = queuedRequests.take(); //消费请求队列
                 } else {
                     si = queuedRequests.poll();
-                    if (si == null) {
-                        flush(toFlush);
+                    // 暂时没有请求了也会刷新到磁盘
+                    if (si == null) { //如果请求队列的当前请求为空
+                        flush(toFlush); //刷到磁盘
                         continue;
                     }
                 }
@@ -137,16 +138,24 @@ public class SyncRequestProcessor extends ZooKeeperCriticalThread implements Req
                 }
                 if (si != null) {
                     // track the number of records written to the log
+                    // 先持久化日志！成功了才继续下面的操作
+                    // 一个事务日志文件会包含多个请求
                     if (zks.getZKDatabase().append(si)) {
+                        // 每个请求加1
                         logCount++;
+                        //如果logCount到了一定的量，zk运行过程中会不断地接受到请求，那么这个logCount就不会断的增加，
+                        // 增加到一定的数据量之后，就会先生成一个快照，然后加入到待刷新到磁盘列表中去
                         if (logCount > (snapCount / 2 + randRoll)) {
+                            // 下一次的随机数重新选
                             setRandRoll(r.nextInt(snapCount/2));
                             // roll the log
+                            // 事务日志滚动记录到另外一个新文件
                             zks.getZKDatabase().rollLog();
                             // take a snapshot
-                            if (snapInProcess != null && snapInProcess.isAlive()) {
+                            if (snapInProcess != null && snapInProcess.isAlive()) {  //正在进行快照
                                 LOG.warn("Too busy to snap, skipping");
                             } else {
+                                // 没有开启快照线程的话就单独开启一个线程，这个线程里没有循环，所以只会执行一次
                                 snapInProcess = new ZooKeeperThread("Snapshot Thread") {
                                         public void run() {
                                             try {
@@ -160,7 +169,7 @@ public class SyncRequestProcessor extends ZooKeeperCriticalThread implements Req
                             }
                             logCount = 0;
                         }
-                    } else if (toFlush.isEmpty()) {
+                    } else if (toFlush.isEmpty()) { //刷到磁盘的队列为空
                         // optimization for read heavy workloads
                         // iff this is a read, and there are no pending
                         // flushes (writes), then just pass this to the next
@@ -173,7 +182,10 @@ public class SyncRequestProcessor extends ZooKeeperCriticalThread implements Req
                         }
                         continue;
                     }
+                    // 待刷新到磁盘
                     toFlush.add(si);
+                    // 当请求数超过1000了就会刷新到磁盘
+                    // flush方法里面也会调用nextProcessor，代表刷新到事务都持久化到磁盘之后，就调用下一个请求处理器
                     if (toFlush.size() > 1000) {
                         flush(toFlush);
                     }
