@@ -168,6 +168,7 @@ public class Learner {
      *                the request from the client
      * @throws IOException
      */
+    // 把这个request发送给leader
     void request(Request request) throws IOException {
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         DataOutputStream oa = new DataOutputStream(baos);
@@ -390,6 +391,7 @@ public class Learner {
                             + Long.toHexString(lastQueued + 1));
                     }
                     lastQueued = pif.hdr.getZxid();
+                    // 投票时，先加在这个list中，等提交命令来了就可以提交了
                     packetsNotCommitted.add(pif);
                     break;
                 case Leader.COMMIT:
@@ -399,6 +401,7 @@ public class Learner {
                             LOG.warn("Committing " + qp.getZxid() + ", but next proposal is " + pif.hdr.getZxid());
                         } else {
                             zk.processTxn(pif.hdr, pif.rec);
+                            // 提交命令过来了就放入到packetsCommitted中
                             packetsNotCommitted.remove();
                         }
                     } else {
@@ -463,9 +466,11 @@ public class Learner {
                 }
             }
         }
+        // 不管是什么命令都会返回ack
         ack.setZxid(ZxidUtils.makeZxid(newEpoch, 0));
         writePacket(ack, true);
         sock.setSoTimeout(self.tickTime * self.syncLimit);
+        // 服务器初始化，和单机模式一样的了
         zk.startup();
         /*
          * Update the election vote here to ensure that all members of the

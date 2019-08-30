@@ -87,6 +87,7 @@ public class FollowerRequestProcessor extends ZooKeeperCriticalThread implements
                 case OpCode.createSession:
                 case OpCode.closeSession:
                 case OpCode.multi:
+                    // Follower接受到了上诉命令，就会把request发送给leader
                     zks.getFollower().request(request);
                     break;
                 }

@@ -56,6 +56,7 @@ public class CommitProcessor extends ZooKeeperCriticalThread implements RequestP
      * leader or we just let the sync operation flow through like a read. The flag will
      * be false if the CommitProcessor is in a Leader pipeline.
      */
+    // 在leader端是false，learner端是true，因为learner端sync请求需要等待leader回复，而leader端本身则不需要
     boolean matchSyncs;
 
     public CommitProcessor(RequestProcessor nextProcessor, String id,
@@ -67,6 +68,7 @@ public class CommitProcessor extends ZooKeeperCriticalThread implements RequestP
 
     volatile boolean finished = false;
 
+    // 对于非事务请求，直接调用nextProcessor， 对于事务请求，会阻塞，直到投票成功
     @Override
     public void run() {
         try {
@@ -74,12 +76,14 @@ public class CommitProcessor extends ZooKeeperCriticalThread implements RequestP
             while (!finished) {
                 int len = toProcess.size();
                 for (int i = 0; i < len; i++) {
+                    // 非事务请求，或已经提交的事务请求，交给下一个处理器处理
                     nextProcessor.processRequest(toProcess.get(i));
                 }
                 toProcess.clear();
                 synchronized (this) {
                     if ((queuedRequests.size() == 0 || nextPending != null)
                             && committedRequests.size() == 0) {
+                        // 一旦有事务请求，需要等待投票，这里还有一个功能就是，保证了请求的有序性
                         wait();
                         continue;
                     }

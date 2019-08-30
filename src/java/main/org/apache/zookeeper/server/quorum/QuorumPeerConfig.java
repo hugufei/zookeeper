@@ -396,11 +396,13 @@ public class QuorumPeerConfig {
                  */
 
                 LOG.info("Defaulting to majority quorums");
+                // 目前这个servers不包括参与者，所以再算过半的时候不包括观察者
                 quorumVerifier = new QuorumMaj(servers.size());
             }
 
             // Now add observers to servers, once the quorums have been
             // figured out
+            // 这里才把参与者加到servers中区
             servers.putAll(observers);
 
             File myIdFile = new File(dataDir, "myid");

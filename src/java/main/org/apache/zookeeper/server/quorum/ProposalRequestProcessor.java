@@ -71,8 +71,9 @@ public class ProposalRequestProcessor implements RequestProcessor {
         if(request instanceof LearnerSyncRequest){
             zks.getLeader().processSync((LearnerSyncRequest)request);
         } else {
+            // 先交给下一个nextProcessor
                 nextProcessor.processRequest(request);
-            if (request.hdr != null) {
+            if (request.hdr != null) { // 如果是事务请求，Leader发出提议,集群进行投票
                 // We need to sync and get consensus on any transactions
                 try {
                     zks.getLeader().propose(request);

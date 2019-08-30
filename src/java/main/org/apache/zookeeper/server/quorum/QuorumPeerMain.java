@@ -111,11 +111,13 @@ public class QuorumPeerMain {
         purgeMgr.start();
 
         if (args.length == 1 && config.servers.size() > 0) {
+            // 集群模式
             runFromConfig(config);
         } else {
             LOG.warn("Either no config or no quorum defined in config, running "
                     + " in standalone mode");
             // there is only server in the quorum -- run as standalone
+            // 单机模式
             ZooKeeperServerMain.main(args);
         }
     }
@@ -129,6 +131,7 @@ public class QuorumPeerMain {
   
       LOG.info("Starting quorum peer");
       try {
+          // 默认NIOServerCnxnFactory
           ServerCnxnFactory cnxnFactory = ServerCnxnFactory.createFactory();
           cnxnFactory.configure(config.getClientPortAddress(),
                                 config.getMaxClientCnxns());

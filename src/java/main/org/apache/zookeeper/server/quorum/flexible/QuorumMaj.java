@@ -57,6 +57,10 @@ public class QuorumMaj implements QuorumVerifier {
      * Verifies if a set is a majority.
      */
     public boolean containsQuorum(Set<Long> set){
+        // 判断set的大小是否大于一半
+        // 那么这个half是怎么算的
+        // 若7台机器，3台参与者，4台observer，如何算过半
+        // 我们要去看QuorumPeerConfig#parseProperties
         return (set.size() > half);
     }
     

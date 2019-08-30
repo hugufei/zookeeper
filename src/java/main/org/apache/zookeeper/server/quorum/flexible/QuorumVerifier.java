@@ -29,5 +29,6 @@ import java.util.Set;
 
 public interface QuorumVerifier {
     long getWeight(long id);
+    // 用来判断set参数的服务器集合能否构成一个集群，（通常是过半机制，常见实现QuorumMaj）
     boolean containsQuorum(Set<Long> set);
 }

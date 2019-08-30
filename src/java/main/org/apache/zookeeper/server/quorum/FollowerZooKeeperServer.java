@@ -71,7 +71,14 @@ public class FollowerZooKeeperServer extends LearnerZooKeeperServer {
 
     @Override
     protected void setupRequestProcessors() {
+        // 有四个processor, 那么顺序是怎么样的呢
+        // CommitProcessor的next是FinalRequestProcessor，所以 CommitProcessor->FinalRequestProcessor
+        // FollowerRequestProcessor的next是CommitProcessor， 所以FollowerRequestProcessor->CommitProcessor
+
+
         RequestProcessor finalProcessor = new FinalRequestProcessor(this);
+
+        // CommitProcessor有阻塞的作用
         commitProcessor = new CommitProcessor(finalProcessor,
                 Long.toString(getServerId()), true,
                 getZooKeeperServerListener());
