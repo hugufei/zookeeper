@@ -189,6 +189,7 @@ public class FileTxnSnapLog {
      * @return the highest zxid restored.
      * @throws IOException
      */
+    // 从快照中还原数据库时，快照很可能落后于事务日志，所以需要从落后的那一部分事务日志中更新内存
     public long fastForwardFromEdits(DataTree dt, Map<Long, Integer> sessions,
                                      PlayBackListener listener) throws IOException {
         FileTxnLog txnLog = new FileTxnLog(dataDir);
@@ -294,6 +295,8 @@ public class FileTxnSnapLog {
      * @param sessionsWithTimeouts the sesssion timeouts to be
      * serialized onto disk
      * @throws IOException
+     *
+     * 持久化快照
      */
     public void save(DataTree dataTree,
             ConcurrentHashMap<Long, Integer> sessionsWithTimeouts)
