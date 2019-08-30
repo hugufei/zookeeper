@@ -44,7 +44,7 @@ import org.slf4j.LoggerFactory;
 abstract class ClientCnxnSocket {
     private static final Logger LOG = LoggerFactory.getLogger(ClientCnxnSocket.class);
 
-    protected boolean initialized;
+    protected boolean initialized; // 是否初始化
 
     /**
      * This buffer is only used to read the length of the incoming message.
@@ -78,10 +78,12 @@ abstract class ClientCnxnSocket {
         now = Time.currentElapsedTime();
     }
 
+    // 获取接收数据的空闲时间
     int getIdleRecv() {
         return (int) (now - lastHeard);
     }
 
+    // 距离上一次发送数据的时间
     int getIdleSend() {
         return (int) (now - lastSend);
     }
@@ -141,6 +143,7 @@ abstract class ClientCnxnSocket {
         }
 
         this.sessionId = conRsp.getSessionId();
+        // 连接成功之后
         sendThread.onConnected(conRsp.getTimeOut(), this.sessionId,
                 conRsp.getPasswd(), isRO);
     }
