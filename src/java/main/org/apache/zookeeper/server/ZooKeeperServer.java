@@ -413,6 +413,8 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
             createSessionTracker();
         }
         startSessionTracker();
+        // 这里比较重要，这里设置请求处理器，包括请求前置处理器，和请求后置处理器
+        // 注意，集群模式下，learner服务端都对调用这个方法，但是比如FollowerZookeeperServer和ObserverZooKeeperServer都会重写这个方法
         setupRequestProcessors();
 
         registerJMX();
@@ -748,7 +750,9 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
             touch(si.cnxn);
             boolean validpacket = Request.isValid(si.type);
             if (validpacket) {
+                // 往下，这里默认用的是PrepRequestProcessor，并且这是一个线程，会不停的从队列中获取命令进行处理
                 firstProcessor.processRequest(si);
+                // 处理中的请求加1
                 if (si.cnxn != null) {
                     incInProcess();
                 }
