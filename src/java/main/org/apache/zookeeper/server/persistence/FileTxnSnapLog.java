@@ -45,6 +45,8 @@ import org.slf4j.LoggerFactory;
  * above the implementations 
  * of txnlog and snapshot 
  * classes
+ *
+ * FileTnxSnapLog封装了TxnLog和SnapShot，其在持久化过程中是一个帮助类。
  */
 public class FileTxnSnapLog {
     //the direcotry containing the 

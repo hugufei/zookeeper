@@ -80,8 +80,17 @@ public class NIOServerCnxnFactory extends ServerCnxnFactory implements Runnable 
     @Override
     public void configure(InetSocketAddress addr, int maxcc) throws IOException {
         configureSaslLogin();
-
+        // 把当前类作为线程
         thread = new ZooKeeperThread(this, "NIOServerCxn.Factory:" + addr);
+
+        // java中线程分为两种类型：用户线程和守护线程。
+        // 通过Thread.setDaemon(false)设置为用户线程；通过Thread.setDaemon(true)设置为守护线程。
+        // 如果不设置次属性，默认为用户线程。
+        // 守护进程（Daemon）是运行在后台的一种特殊进程。它独立于控制终端并且周期性地执行某种任务或等待处理某些发生的事件。也就是说守护线程不依赖于终端，但是依赖于系统，与系统“同生共死”。
+        // 那Java的守护线程是什么样子的呢。当JVM中所有的线程都是守护线程的时候，JVM就可以退出了；如果还有一个或以上的非守护线程则JVM不会退出
+        // 垃圾回收线程就是一个经典的守护线程，当我们的程序中不再有任何运行的Thread,程序就不会再产生垃圾，垃圾回收器也就无事可做，所以当垃圾回收线程是JVM上仅剩的线程时，垃圾回收线程会自动离开。
+        // 它始终在低级别的状态中运行，用于实时监控和管理系统中的可回收资源。
+        // 所以这里的这个线程是为了和JVM生命周期绑定，只剩下这个线程时已经没有意义了，应该关闭掉。
         thread.setDaemon(true);
         maxClientCnxns = maxcc;
         this.ss = ServerSocketChannel.open();
@@ -191,6 +200,8 @@ public class NIOServerCnxnFactory extends ServerCnxnFactory implements Runnable 
     }
 
     public void run() {
+        // 如果socket没有关闭掉
+        // selector是跟nio有关系的，我们看核心代码
         while (!ss.socket().isClosed()) {
             try {
                 selector.select(1000);
@@ -203,6 +214,7 @@ public class NIOServerCnxnFactory extends ServerCnxnFactory implements Runnable 
                 Collections.shuffle(selectedList);
                 for (SelectionKey k : selectedList) {
                     if ((k.readyOps() & SelectionKey.OP_ACCEPT) != 0) {
+                        // 建立连接
                         SocketChannel sc = ((ServerSocketChannel) k
                                 .channel()).accept();
                         InetAddress ia = sc.socket().getInetAddress();
@@ -222,6 +234,7 @@ public class NIOServerCnxnFactory extends ServerCnxnFactory implements Runnable 
                             addCnxn(cnxn);
                         }
                     } else if ((k.readyOps() & (SelectionKey.OP_READ | SelectionKey.OP_WRITE)) != 0) {
+                        // 接收数据,这里会间歇性的接收到客户端ping
                         NIOServerCnxn c = (NIOServerCnxn) k.attachment();
                         c.doIO(k);
                     } else {
