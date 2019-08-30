@@ -642,7 +642,7 @@ public class FastLeaderElection implements Election {
             HashMap<Long, Vote> votes,
             Vote vote) {
 
-        HashSet<Long> set = new HashSet<Long>();
+        HashSet<Long> set = new HashSet<Long>(); // sit
 
         /*
          * First make the views consistent. Sometimes peers will have
@@ -651,7 +651,7 @@ public class FastLeaderElection implements Election {
          */
         for (Map.Entry<Long,Vote> entry : votes.entrySet()) {
             if (vote.equals(entry.getValue())){
-                set.add(entry.getKey());
+                set.add(entry.getKey()); //这里是sid
             }
         }
         // 看自己的投票的服务器的选票数量符不符合过半验证
@@ -810,7 +810,7 @@ public class FastLeaderElection implements Election {
            self.start_fle = Time.currentElapsedTime();
         }
         try {
-            HashMap<Long, Vote> recvset = new HashMap<Long, Vote>();
+            HashMap<Long, Vote> recvset = new HashMap<Long, Vote>();  //投票箱，key:其他服务器sid，Vote
 
             HashMap<Long, Vote> outofelection = new HashMap<Long, Vote>();
 

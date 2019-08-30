@@ -390,6 +390,7 @@ public class Learner {
                             + " expected 0x"
                             + Long.toHexString(lastQueued + 1));
                     }
+                    System.out.println("=========提议");
                     lastQueued = pif.hdr.getZxid();
                     // 投票时，先加在这个list中，等提交命令来了就可以提交了
                     packetsNotCommitted.add(pif);

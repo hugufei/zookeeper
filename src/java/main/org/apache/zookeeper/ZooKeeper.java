@@ -150,6 +150,7 @@ public class ZooKeeper {
          * @see org.apache.zookeeper.ClientWatchManager#materialize(Event.KeeperState, 
          *                                                        Event.EventType, java.lang.String)
          */
+        // 这个方法负责获取一个节点绑定了哪些watcher，并且负责移除，先移除然后返回
         @Override
         public Set<Watcher> materialize(Watcher.Event.KeeperState state,
                                         Watcher.Event.EventType type,
@@ -194,6 +195,7 @@ public class ZooKeeper {
             case NodeDataChanged:
             case NodeCreated:
                 synchronized (dataWatches) {
+                    // 这里负责移除
                     addTo(dataWatches.remove(clientPath), result);
                 }
                 synchronized (existWatches) {

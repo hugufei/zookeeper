@@ -1023,9 +1023,11 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
                 return;
             }
             else {
+                // 注意这里构造请求的时候会吧cnxn中的authInfo加入到request中去
                 Request si = new Request(cnxn, cnxn.getSessionId(), h.getXid(),
                   h.getType(), incomingBuffer, cnxn.getAuthInfo());
                 si.setOwner(ServerCnxn.me);
+                // 提交请求
                 submitRequest(si);
             }
         }

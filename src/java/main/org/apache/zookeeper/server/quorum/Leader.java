@@ -333,6 +333,7 @@ public class Leader {
 
                         BufferedInputStream is = new BufferedInputStream(
                                 s.getInputStream());
+                        // 除开Leader服务器，其他服务器都会与Leader建立连接，这个时候都会新建出一个LearnerHandler线程
                         LearnerHandler fh = new LearnerHandler(s, is, Leader.this);
                         fh.start();
                     } catch (SocketException e) {
@@ -435,7 +436,8 @@ public class Leader {
                 self.tick.incrementAndGet();
                 return;
             }
-            
+
+            // 初始化
             startZkServer();
             
             /**
@@ -622,8 +624,8 @@ public class Leader {
             if (p.request == null) {
                 LOG.warn("Going to commmit null request for proposal: {}", p);
             }
-            commit(zxid);
-            inform(p);
+            commit(zxid); // Follower提交
+            inform(p); // Observer同步
             zk.commitProcessor.commit(p.request);
             if(pendingSyncs.containsKey(zxid)){
                 for(LearnerSyncRequest r: pendingSyncs.remove(zxid)) {
