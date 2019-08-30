@@ -258,6 +258,7 @@ public class FastLeaderElection implements Election {
                          * way we check for observers.
                          */
                         if(!validVoter(response.sid)){
+                            // 不是合法的投票者，那么它就是observer，把自己当前的投票告诉他
                             Vote current = self.getCurrentVote();
                             ToSend notmsg = new ToSend(ToSend.mType.notification,
                                     current.getId(),
@@ -290,6 +291,7 @@ public class FastLeaderElection implements Election {
                             Notification n = new Notification();
                             
                             // State of peer that sent this message
+                            // 对方的服务器状态
                             QuorumPeer.ServerState ackstate = QuorumPeer.ServerState.LOOKING;
                             switch (response.buffer.getInt()) {
                             case 0:
@@ -339,7 +341,7 @@ public class FastLeaderElection implements Election {
                             /*
                              * If this server is looking, then send proposed leader
                              */
-
+                            // 如果自己是LOOKING状态，代表正在进行领导选举
                             if(self.getPeerState() == QuorumPeer.ServerState.LOOKING){
                                 recvqueue.offer(n);
 
@@ -365,6 +367,8 @@ public class FastLeaderElection implements Election {
                                  * If this server is not looking, but the one that sent the ack
                                  * is looking, then send back what it believes to be the leader.
                                  */
+                                // 如果自己现在不是LOOKING状态, 那么有可能自己是Leader，或自己是Follower
+                                // 那么就把他认为的Leader作为投票发送出去
                                 Vote current = self.getCurrentVote();
                                 if(ackstate == QuorumPeer.ServerState.LOOKING){
                                     if(LOG.isDebugEnabled()){
@@ -518,6 +522,7 @@ public class FastLeaderElection implements Election {
     public FastLeaderElection(QuorumPeer self, QuorumCnxManager manager){
         this.stop = false;
         this.manager = manager;
+        // 初始化sendqueue、recvqueue 并且启动WorkerSender和WorkerReceiver线程
         starter(self, manager);
     }
 
@@ -569,6 +574,7 @@ public class FastLeaderElection implements Election {
     /**
      * Send notifications to all peers upon a change in our vote
      */
+    // 给所有参与投票的服务器发送notifications
     private void sendNotifications() {
         for (QuorumServer server : self.getVotingView().values()) {
             long sid = server.id;
@@ -600,12 +606,13 @@ public class FastLeaderElection implements Election {
      * Check if a pair (server id, zxid) succeeds our
      * current vote.
      *
-     * @param id    Server identifier
-     * @param zxid  Last zxid observed by the issuer of this vote
+     * @param newId    Server identifier
+     * @param newZxid  Last zxid observed by the issuer of this vote
      */
     protected boolean totalOrderPredicate(long newId, long newZxid, long newEpoch, long curId, long curZxid, long curEpoch) {
         LOG.debug("id: " + newId + ", proposed id: " + curId + ", zxid: 0x" +
                 Long.toHexString(newZxid) + ", proposed zxid: 0x" + Long.toHexString(curZxid));
+        // getWeight这里QuorumMaj会固定返回1
         if(self.getQuorumVerifier().getWeight(newId) == 0){
             return false;
         }
@@ -628,8 +635,8 @@ public class FastLeaderElection implements Election {
      * have sufficient to declare the end of the election round.
      *
      *  @param votes    Set of votes
-     *  @param l        Identifier of the vote received last
-     *  @param zxid     zxid of the the vote received last
+     *  @param vote  l        Identifier of the vote received last
+     *  @param vote zxid     zxid of the the vote received last
      */
     protected boolean termPredicate(
             HashMap<Long, Vote> votes,
@@ -640,13 +647,14 @@ public class FastLeaderElection implements Election {
         /*
          * First make the views consistent. Sometimes peers will have
          * different zxids for a server depending on timing.
+         * 将接受的的选票，和自己的投的相同的票过滤出来
          */
         for (Map.Entry<Long,Vote> entry : votes.entrySet()) {
             if (vote.equals(entry.getValue())){
                 set.add(entry.getKey());
             }
         }
-
+        // 看自己的投票的服务器的选票数量符不符合过半验证
         return self.getQuorumVerifier().containsQuorum(set);
     }
 
@@ -693,7 +701,10 @@ public class FastLeaderElection implements Election {
      * @param recv  map of received votes 
      * @param ooe   map containing out of election votes (LEADING or FOLLOWING)
      * @param n     Notification
-     * @return          
+     * @return
+     *
+     * 该函数用于接收某些状态已经为leading和following的消息时(即部分server认为leader已经选举出来了 ， 自己还在looking状态下),
+     * 自己是否可以加入这个集群
      */
     protected boolean ooePredicate(HashMap<Long,Vote> recv, 
                                     HashMap<Long,Vote> ooe, 
@@ -807,23 +818,25 @@ public class FastLeaderElection implements Election {
 
             synchronized(this){
                 logicalclock.incrementAndGet();
+                //更新提议，包含(myid,lastZxid,epoch)，更新为自己
                 updateProposal(getInitId(), getInitLastLoggedZxid(), getPeerEpoch());
             }
 
             LOG.info("New election. My id =  " + self.getId() +
                     ", proposed zxid=0x" + Long.toHexString(proposedZxid));
-            sendNotifications();
+            sendNotifications(); // 启动时先投票给自己
 
             /*
              * Loop in which we exchange notifications until we find a leader
              */
 
             while ((self.getPeerState() == ServerState.LOOKING) &&
-                    (!stop)){
+                    (!stop)){ //只要没有停止，并且状态处于LOOKING状态
                 /*
                  * Remove next notification from queue, times out after 2 times
                  * the termination time
                  */
+                // 获取其他服务器的投票
                 Notification n = recvqueue.poll(notTimeout,
                         TimeUnit.MILLISECONDS);
 
@@ -832,9 +845,12 @@ public class FastLeaderElection implements Election {
                  * Otherwise processes new notification.
                  */
                 if(n == null){
+                    // 获取到的选票是空的，判断有没有需要发送的数据
+                    // 因为之前已经sendNotifications过一次了（投票给自己），所以如果走到这里来，发现有东西没发送出去，那么可能的原因就是连接还没建立
                     if(manager.haveDelivered()){
                         sendNotifications();
                     } else {
+                        // 连接所有可以投票的服务器,谁可以投票，
                         manager.connectAll();
                     }
 
@@ -847,26 +863,33 @@ public class FastLeaderElection implements Election {
                     LOG.info("Notification time out: " + notTimeout);
                 }
                 else if(validVoter(n.sid) && validVoter(n.leader)) {
+                    // 如果接收到了结果
                     /*
                      * Only proceed if the vote comes from a replica in the
                      * voting view for a replica in the voting view.
                      */
                     switch (n.state) {
                     case LOOKING:
+                        // 发送选票的服务器也在进行领导者选举
                         // If notification > current, replace and send messages out
-                        if (n.electionEpoch > logicalclock.get()) {
-                            logicalclock.set(n.electionEpoch);
-                            recvset.clear();
+                        if (n.electionEpoch > logicalclock.get()) { //如果接收到的投票轮次比自己的高
+                            logicalclock.set(n.electionEpoch); // 设置自己的时钟为选票的时钟
+                            recvset.clear(); // 清空自己的选票
+
+                            // 比较选票对应的服务器和本机，如果选票对应的服务器更新就更新投票为选票所对应的服务器
                             if(totalOrderPredicate(n.leader, n.zxid, n.peerEpoch,
                                     getInitId(), getInitLastLoggedZxid(), getPeerEpoch())) {
                                 updateProposal(n.leader, n.zxid, n.peerEpoch);
                             } else {
+                                // 否则投给自己
                                 updateProposal(getInitId(),
                                         getInitLastLoggedZxid(),
                                         getPeerEpoch());
                             }
+                            // 发送投票
                             sendNotifications();
                         } else if (n.electionEpoch < logicalclock.get()) {
+                            // 接受到的选票小于自己的时钟，放弃
                             if(LOG.isDebugEnabled()){
                                 LOG.debug("Notification election epoch is smaller than logicalclock. n.electionEpoch = 0x"
                                         + Long.toHexString(n.electionEpoch)
@@ -875,6 +898,7 @@ public class FastLeaderElection implements Election {
                             break;
                         } else if (totalOrderPredicate(n.leader, n.zxid, n.peerEpoch,
                                 proposedLeader, proposedZxid, proposedEpoch)) {
+                            // 如果时钟相等，同样比较谁的服务器更新
                             updateProposal(n.leader, n.zxid, n.peerEpoch);
                             sendNotifications();
                         }
@@ -885,16 +909,23 @@ public class FastLeaderElection implements Election {
                                     ", proposed zxid=0x" + Long.toHexString(n.zxid) +
                                     ", proposed election epoch=0x" + Long.toHexString(n.electionEpoch));
                         }
-
+                        // 保存自己接受到的选票
                         recvset.put(n.sid, new Vote(n.leader, n.zxid, n.electionEpoch, n.peerEpoch));
 
+                        // 根据接受到的选票，以及自己的投票，来判断能不能成为Leader
                         if (termPredicate(recvset,
                                 new Vote(proposedLeader, proposedZxid,
                                         logicalclock.get(), proposedEpoch))) {
+                            // 如果符合过半验证，本台服务器就认为选出了Leader
 
                             // Verify if there is any change in the proposed leader
                             while((n = recvqueue.poll(finalizeWait,
                                     TimeUnit.MILLISECONDS)) != null){
+
+                                // 如果又接收到了选票，如果该选票比刚刚选出来的更优秀，则把该选票加入recvqueue中，并且退出这个while，退出这个while会继续走上层的while
+                                // 这个地方的逻辑其实就是，我已经选出了一个Leader，但有过来的新的投票，如果说新票所对应的服务器没有我选出来的Leader优秀，那么不用管了，继续读取下一个选票进行同样的判断，
+                                // 如果说新的投票所对应的服务器比我选出来的要优秀，那么重新把这个选票放回到recvqueue，并退出当前循环，进入上层循环，重新开始选举
+                                // 如果不够优秀，则继续循环，直到没有获取到选票了
                                 if(totalOrderPredicate(n.leader, n.zxid, n.peerEpoch,
                                         proposedLeader, proposedZxid, proposedEpoch)){
                                     recvqueue.put(n);
@@ -907,9 +938,12 @@ public class FastLeaderElection implements Election {
                              * relevant message from the reception queue
                              */
                             if (n == null) {
+                                // 如果没有获取到选票了，那么Leader也就选出来了
+                                // 如果选出来的是自己，就将自己设置为LEADING, 如果是其他服务器，就将自己设置为对应的状态
                                 self.setPeerState((proposedLeader == self.getId()) ?
                                         ServerState.LEADING: learningState());
 
+                                // 将本服务器最终的投票返回
                                 Vote endVote = new Vote(proposedLeader,
                                                         proposedZxid,
                                                         logicalclock.get(),
