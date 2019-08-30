@@ -399,6 +399,7 @@ public class DataTree {
             DataNode child = new DataNode(parent, data, longval, stat);
             parent.addChild(childName);
             nodes.put(path, child);
+            // 如果是临时节点
             if (ephemeralOwner != 0) {
                 HashSet<String> list = ephemerals.get(ephemeralOwner);
                 if (list == null) {
@@ -430,6 +431,7 @@ public class DataTree {
             updateCount(lastPrefix, 1);
             updateBytes(lastPrefix, data == null ? 0 : data.length);
         }
+        // 在这里触发监听机制的
         dataWatches.triggerWatch(path, Event.EventType.NodeCreated);
         childWatches.triggerWatch(parentName.equals("") ? "/" : parentName,
                 Event.EventType.NodeChildrenChanged);
@@ -697,6 +699,7 @@ public class DataTree {
 
     public volatile long lastProcessedZxid = 0;
 
+    // 根据事务来操作数据
     public ProcessTxnResult processTxn(TxnHeader header, Record txn)
     {
         ProcessTxnResult rc = new ProcessTxnResult();
@@ -712,6 +715,7 @@ public class DataTree {
                 case OpCode.create:
                     CreateTxn createTxn = (CreateTxn) txn;
                     rc.path = createTxn.getPath();
+                    // 创建节点，但是这里都是操作的内存中的数据
                     createNode(
                             createTxn.getPath(),
                             createTxn.getData(),
