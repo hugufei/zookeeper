@@ -45,14 +45,14 @@ import org.apache.zookeeper.txn.TxnHeader;
  * A collection of utility methods for dealing with file name parsing, 
  * low level I/O file operations and marshalling/unmarshalling.
  */
+// 工具类，提供持久化所需的API。
 public class Util {
     private static final Logger LOG = LoggerFactory.getLogger(Util.class);
     private static final String SNAP_DIR="snapDir";
     private static final String LOG_DIR="logDir";
     private static final String DB_FORMAT_CONV="dbFormatConversion";
     
-    public static String makeURIString(String dataDir, String dataLogDir, 
-            String convPolicy){
+    public static String makeURIString(String dataDir, String dataLogDir, String convPolicy){
         String uri="file:"+SNAP_DIR+"="+dataDir+";"+LOG_DIR+"="+dataLogDir;
         if(convPolicy!=null)
             uri+=";"+DB_FORMAT_CONV+"="+convPolicy;

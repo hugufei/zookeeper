@@ -28,6 +28,7 @@ import org.apache.zookeeper.server.DataTree;
  * implement this interface for implementing 
  * snapshots.
  */
+// 接口类型，持久层快照接口。
 public interface SnapShot {
     
     /**
@@ -38,18 +39,15 @@ public interface SnapShot {
      * @return the last zxid that was deserialized from the snapshot
      * @throws IOException
      */
-    long deserialize(DataTree dt, Map<Long, Integer> sessions) 
-        throws IOException;
-    
+    long deserialize(DataTree dt, Map<Long, Integer> sessions) throws IOException;
+
     /**
      * persist the datatree and the sessions into a persistence storage
      * @param dt the datatree to be serialized
      * @param sessions 
      * @throws IOException
      */
-    void serialize(DataTree dt, Map<Long, Integer> sessions, 
-            File name) 
-        throws IOException;
+    void serialize(DataTree dt, Map<Long, Integer> sessions, File name) throws IOException;
     
     /**
      * find the most recent snapshot file

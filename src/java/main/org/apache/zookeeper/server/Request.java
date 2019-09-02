@@ -72,6 +72,7 @@ public class Request {
 
     public final long sessionId;
 
+    //cxid是client端的xid号，如ClientCnxn#getXid
     public final int cxid;
 
     public final int type;
@@ -84,6 +85,7 @@ public class Request {
 
     public Record txn;
 
+    //是server端的xid号，如ZooKeeperServer#getNextZxid
     public long zxid = -1;
 
     public final List<Id> authInfo;

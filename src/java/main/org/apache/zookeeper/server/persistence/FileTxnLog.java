@@ -89,11 +89,12 @@ import org.slf4j.LoggerFactory;
  *     0 padded to EOF (filled during preallocation stage)
  * </pre></blockquote> 
  */
+//实现TxnLog接口，添加了访问该事务性日志的API。
 public class FileTxnLog implements TxnLog {
+
     private static final Logger LOG;
 
-    public final static int TXNLOG_MAGIC =
-        ByteBuffer.wrap("ZKLG".getBytes()).getInt();
+    public final static int TXNLOG_MAGIC = ByteBuffer.wrap("ZKLG".getBytes()).getInt();
 
     public final static int VERSION = 2;
 
@@ -120,8 +121,7 @@ public class FileTxnLog implements TxnLog {
     File logDir;
     private final boolean forceSync = !System.getProperty("zookeeper.forceSync", "yes").equals("no");;
     long dbId;
-    private LinkedList<FileOutputStream> streamsToFlush =
-        new LinkedList<FileOutputStream>();
+    private LinkedList<FileOutputStream> streamsToFlush = new LinkedList<FileOutputStream>();
     File logFileWrite = null;
     private FilePadding filePadding = new FilePadding();
 
@@ -166,8 +166,10 @@ public class FileTxnLog implements TxnLog {
      * rollover the current log file to a new one.
      * @throws IOException
      */
+    //这个一定要看注释，意思不是回滚日志，是从当前日志滚到下一个
     public synchronized void rollLog() throws IOException {
         if (logStream != null) {
+            // 这里数据只是写到缓冲区？？还是刷到磁盘？？
             this.logStream.flush();
             this.logStream = null;
             oa = null;
@@ -195,9 +197,7 @@ public class FileTxnLog implements TxnLog {
      *
      * 添加一个事务到文件中
      */
-    public synchronized boolean append(TxnHeader hdr, Record txn)
-        throws IOException
-    {
+    public synchronized boolean append(TxnHeader hdr, Record txn) throws IOException {
         if (hdr == null) {
             return false;
         }
@@ -210,34 +210,43 @@ public class FileTxnLog implements TxnLog {
             lastZxidSeen = hdr.getZxid();
         }
 
+        // 如果日志流为空
         if (logStream==null) {
            if(LOG.isInfoEnabled()){
                 LOG.info("Creating new log file: " + Util.makeLogName(hdr.getZxid()));
            }
-
+           // 生成一个新的log文件
            logFileWrite = new File(logDir, Util.makeLogName(hdr.getZxid()));
            fos = new FileOutputStream(logFileWrite);
            logStream=new BufferedOutputStream(fos);
            oa = BinaryOutputArchive.getArchive(logStream);
+           // 用TXNLOG_MAGIC VERSION dbId来生成文件头
            FileHeader fhdr = new FileHeader(TXNLOG_MAGIC,VERSION, dbId);
+           // 序列化
            fhdr.serialize(oa, "fileheader");
            // Make sure that the magic number is written before padding.
            logStream.flush();
            filePadding.setCurrentSize(fos.getChannel().position());
            streamsToFlush.add(fos);
         }
+        // 剩余空间不够4k时则填充文件64M??
         filePadding.padFile(fos.getChannel());
         byte[] buf = Util.marshallTxnEntry(hdr, txn);
         if (buf == null || buf.length == 0) {
             throw new IOException("Faulty serialization for header " +
                     "and txn");
         }
+        // 生成验证算法
         Checksum crc = makeChecksumAlgorithm();
         crc.update(buf, 0, buf.length);
-        // oa源于logStream，所以一个事务日志文件就是一个logStream
-        oa.writeLong(crc.getValue(), "txnEntryCRC");
-        Util.writeTxnBytes(oa, buf);
 
+        // oa源于logStream，所以一个事务日志文件就是一个logStream。
+        // 这里主要写入三部分：
+        // 1）将验证算法的值写入long -- txnEntryCRC
+        oa.writeLong(crc.getValue(), "txnEntryCRC");
+        // 2) 获取输出流中byte数组序列化到txtlog -- txnEntry
+        // 3) 写入一条书屋的结束标志（0x42）-- EOR
+        Util.writeTxnBytes(oa, buf);
         return true;
     }
 
@@ -249,7 +258,9 @@ public class FileTxnLog implements TxnLog {
      * @param snapshotZxid return files at, or before this zxid
      * @return
      */
+    // 找出<=snapshot的中最大的zxid的logfile以及后续的logfile
     public static File[] getLogFiles(File[] logDirList,long snapshotZxid) {
+        // 按照后缀抽取zxid，按zxid升序排序
         List<File> files = Util.sortDataDir(logDirList, LOG_FILE_PREFIX, true);
         long logZxid = 0;
         // Find the log file that starts before or at the same time as the
@@ -281,10 +292,11 @@ public class FileTxnLog implements TxnLog {
      * get the last zxid that was logged in the transaction logs
      * @return the last zxid logged in the transaction logs
      */
+    // 获取记录在log中的最后一个zxid
     public long getLastLoggedZxid() {
         File[] files = getLogFiles(logDir.listFiles(), 0);
-        long maxLog=files.length>0?
-                Util.getZxidFromName(files[files.length-1].getName(),LOG_FILE_PREFIX):-1;
+        // 找到最大的zxid所在的文件
+        long maxLog=files.length>0? Util.getZxidFromName(files[files.length-1].getName(),LOG_FILE_PREFIX):-1;
 
         // if a log file is more recent we must scan it to find
         // the highest zxid
@@ -296,6 +308,7 @@ public class FileTxnLog implements TxnLog {
             while (true) {
                 if(!itr.next())
                     break;
+                // 遍历这个文件，找到最后一条事务日志记录
                 TxnHeader hdr = itr.getHeader();
                 zxid = hdr.getZxid();
             }
@@ -321,15 +334,22 @@ public class FileTxnLog implements TxnLog {
      * commit the logs. make sure that evertyhing hits the
      * disk
      */
+    // 提交事务日志至磁盘
+    // 只有commit方法会进行真正的写入磁盘，rollLog并没有
     public synchronized void commit() throws IOException {
         if (logStream != null) {
+            // 这里数据只是写到缓冲区？？还是刷到磁盘？？
             logStream.flush();
         }
         for (FileOutputStream log : streamsToFlush) {
+            // 这里数据只是写到缓冲区？？还是刷到磁盘？？
             log.flush();
             if (forceSync) {
                 long startSyncNS = System.nanoTime();
 
+                // force方法会把所有未写磁盘的数据都强制写入磁盘。
+                // 是因为在操作系统中出于性能考虑回把数据放入缓冲区，所以不能保证数据在调用write写入文件通道后就及时写到磁盘上了，除非手动调用force方法。
+                // force方法需要一个布尔参数，代表是否把meta data也一并强制写入。
                 log.getChannel().force(false);
 
                 long syncElapsedMS =
@@ -347,6 +367,7 @@ public class FileTxnLog implements TxnLog {
             }
         }
         while (streamsToFlush.size() > 1) {
+            //移除流并关闭
             streamsToFlush.removeFirst().close();
         }
     }
@@ -366,9 +387,14 @@ public class FileTxnLog implements TxnLog {
      * @param zxid the zxid to truncate the logs to
      * @return true if successful false if not
      */
+    // 清空大于指定zxid的事务日志
+    // 什么时候会调用truncate 清空部分日志??
+    // 集群版learner向leader同步的时候，leader告诉learner需要回滚同步
+    // 调用方Learner#syncWithLeade方法
     public boolean truncate(long zxid) throws IOException {
         FileTxnIterator itr = null;
         try {
+            //根据zxid找到迭代器
             itr = new FileTxnIterator(this.logDir, zxid);
             PositionInputStream input = itr.inputStream;
             if(input == null) {
@@ -379,9 +405,11 @@ public class FileTxnLog implements TxnLog {
             long pos = input.getPosition();
             // now, truncate at the current position
             RandomAccessFile raf = new RandomAccessFile(itr.logFile, "rw");
+            // 把当前log后面的部分(zxid更大的)截断
             raf.setLength(pos);
             raf.close();
             while (itr.goToNextLog()) {
+                //把后面的log文件都删除
                 if (!itr.logFile.delete()) {
                     LOG.warn("Unable to truncate {}", itr.logFile);
                 }

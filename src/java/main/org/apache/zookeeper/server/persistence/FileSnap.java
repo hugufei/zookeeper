@@ -48,14 +48,15 @@ import org.apache.zookeeper.server.util.SerializeUtils;
  * and deserializing the right snapshot.
  * and provides access to the snapshots.
  */
+// 实现Snapshot接口，负责存储、序列化、反序列化、访问快照。
 public class FileSnap implements SnapShot {
     File snapDir;
     private volatile boolean close = false;
     private static final int VERSION=2;
     private static final long dbId=-1;
     private static final Logger LOG = LoggerFactory.getLogger(FileSnap.class);
-    public final static int SNAP_MAGIC
-        = ByteBuffer.wrap("ZKSN".getBytes()).getInt();
+
+    public final static int SNAP_MAGIC = ByteBuffer.wrap("ZKSN".getBytes()).getInt();
 
     public static final String SNAPSHOT_FILE_PREFIX = "snapshot";
 
