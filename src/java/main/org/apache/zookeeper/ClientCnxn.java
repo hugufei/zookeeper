@@ -140,13 +140,13 @@ public class ClientCnxn {
      * These are the packets that have been sent and are waiting for a response.
      */
     // 是已经从client发送，但是要等待server响应的packet队列
-    // auth和ping以及正在处理的sasl没有加入pendingQueue,触发的watch也没有在pendingQueue中.
+    // 但是：auth和ping以及正在处理的sasl没有加入pendingQueue,触发的watch也没有在pendingQueue中.
     private final LinkedList<Packet> pendingQueue = new LinkedList<Packet>();
 
     /**
      * These are the packets that need to be sent.
-     * outgoingQueue 是请求发送队列，是client存储需要被发送到server端的Packet队列
      */
+    // 是请求发送队列，是client存储需要被发送到server端的Packet队列
     private final LinkedList<Packet> outgoingQueue = new LinkedList<Packet>();
 
     private int connectTimeout;
@@ -798,7 +798,6 @@ public class ClientCnxn {
         // PS: auth和ping以及正在处理的sasl没有加入pendingQueue,
         // 触发的watch也没有在pendingQueue中(是server主动发过来的),
         // 而AsyncCallBack在pendingQueue中(见finishPacket)
-
         void readResponse(ByteBuffer incomingBuffer) throws IOException {
             ByteBufferInputStream bbis = new ByteBufferInputStream(incomingBuffer);
             BinaryInputArchive bbia = BinaryInputArchive.getArchive(bbis);
@@ -1278,8 +1277,7 @@ public class ClientCnxn {
                         }
                         to = Math.min(to, pingRwTimeout - idlePingRwServer);
                     }
-                    // 6） 不断进行IO操作，发送请求队列中的请求和读取服务器端的响应数据
-                    // 进行传输，传输的是outgoingQueue队列中的Packet
+                    // 6） 不断进行IO操作，发送请求队列中的请求和读取服务器端的响应数据, 传输的是outgoingQueue队列中的Packet
                     clientCnxnSocket.doTransport(to, pendingQueue, outgoingQueue, ClientCnxn.this);
                 } catch (Throwable e) {
                     if (closing) {
@@ -1575,8 +1573,7 @@ public class ClientCnxn {
     }
 
     //调用sendThread往服务器发送请求
-    public void sendPacket(Record request, Record response, AsyncCallback cb, int opCode)
-    throws IOException {
+    public void sendPacket(Record request, Record response, AsyncCallback cb, int opCode) throws IOException {
         // Generate Xid now because it will be sent immediately,
         // by call to sendThread.sendPacket() below.
         int xid = getXid();
