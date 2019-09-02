@@ -36,21 +36,27 @@ import org.apache.zookeeper.data.StatPersisted;
  * array of ACLs, a stat object, and a set of its children's paths.
  * 
  */
+//DataNode是数据存储的最小单元，其内部除了保存了结点的数据内容、ACL列表、节点状态之外，还记录了父节点的引用和子节点列表两个属性，其也提供了对子节点列表进行操作的接口。
 public class DataNode implements Record {
+
     /** the parent of this datanode */
+    // 父节点
     DataNode parent;
 
     /** the data for this datanode */
+    // 数据内容
     byte data[];
 
     /**
      * the acl map long for this datanode. the datatree has the map
      */
+    // ACL信息
     Long acl;
 
     /**
      * the stat for this node that is persisted to disk.
      */
+    // 状态信息
     public StatPersisted stat;
 
     /**
@@ -58,6 +64,7 @@ public class DataNode implements Record {
      * does not contain the parent path -- just the last part of the path. This
      * should be synchronized on except deserializing (for speed up issues).
      */
+    // 子节点集合
     private Set<String> children = null;
 
     private static final Set<String> EMPTY_SET = Collections.emptySet();

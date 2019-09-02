@@ -354,6 +354,8 @@ public class PrepRequestProcessor extends ZooKeeperCriticalThread implements
                     CreateMode.fromFlag(createRequest.getFlags());
 
                 // 创建顺序节点，则在path后面加上序列号，cVersion初始值为0
+                // 其实就是根据parentCVersion实现的，也就是子节点列表变化次数(版本号)作为path的后缀
+                // 因此有可能出现后缀递增，但是不连续的EPHEMERAL_SEQUENTIAL
                 if (createMode.isSequential()) {
                     path = path + String.format(Locale.ENGLISH, "%010d", parentCVersion);
                 }
