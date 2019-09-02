@@ -156,6 +156,8 @@ public class Util {
      * @return true if the snapshot is valid
      * @throws IOException
      */
+    // 怎么样算大概率valid,大概率valid什么时候不是truely valid?
+    // 函数里面检查了checkSum, 也就是说snapShot文件格式之类的都ok，但是数据内容被改了导致checkSum不一致，我认为是这些情况。
     public static boolean isValidSnapshot(File f) throws IOException {
         if (f==null || Util.getZxidFromName(f.getName(), FileSnap.SNAPSHOT_FILE_PREFIX) == -1)
             return false;
@@ -184,6 +186,7 @@ public class Util {
             ByteBuffer bb = ByteBuffer.wrap(bytes);
             int len = bb.getInt();
             byte b = bb.get();
+            // 判断结束标志
             if (len != 1 || b != '/') {
                 LOG.info("Invalid snapshot " + f + " len = " + len
                         + " byte = " + (b & 0xff));
