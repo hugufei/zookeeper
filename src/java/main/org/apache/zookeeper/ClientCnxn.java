@@ -89,9 +89,11 @@ import org.slf4j.LoggerFactory;
  * of available servers to connect to and "transparently" switches servers it is
  * connected to as needed.
  *
- *
  */
+
+//ClientCnxn是Zookeeper客户端中负责维护客户端与服务端之间的网络连接并进行一系列网络通信的核心工作类
 public class ClientCnxn {
+
     private static final Logger LOG = LoggerFactory.getLogger(ClientCnxn.class);
 
     private static final String ZK_SASL_CLIENT_USERNAME =
@@ -251,33 +253,44 @@ public class ClientCnxn {
 
     /**
      * This class allows us to pass the headers and the relevant records around.
-     * 并非Packet中所有的属性都在客户端与服务端之间进行网络传输，只会将requestHeader、request、readOnly三个属性序列化，并生成可用于底层网络传输的ByteBuffer，
-     * 其他属性都保存在客户端的上下文中，不会进行与服务端之间的网络传输。
      */
+    // Packet是ClientCnxn内部定义的一个堆协议层的封装，用作Zookeeper中请求和响应的载体。
+    // Packet包含了请求头（requestHeader）、响应头（replyHeader）、请求体（request）、响应体（response）、节点路径（clientPath/serverPath）、注册的Watcher（watchRegistration）等信息
+    // 然而，并非Packet中所有的属性都在客户端与服务端之间进行网络传输，只会将requestHeader、request、readOnly三个属性序列化，并生成可用于底层网络传输的ByteBuffer，
+    // 其他属性都保存在客户端的上下文中，不会进行与服务端之间的网络传输。
     static class Packet {
+        // 请求头
         RequestHeader requestHeader;
-
+        // 响应头
         ReplyHeader replyHeader;
-
+        // 请求体
         Record request;
-
+        // 响应体
         Record response;
 
+        //序列化之后的byteBuffer
         ByteBuffer bb;
 
         /** Client's view of the path (may differ due to chroot) **/
-        String clientPath;
+        //client节点路径，不含chrootPath
+        String clientPath; //客户端节点路径
         /** Servers's view of the path (may differ due to chroot) **/
+        //server节点路径,含chrootPath
         String serverPath;
 
+        // 是否结束(已经得到响应才能结束)
         boolean finished;
 
+        //异步回调
         AsyncCallback cb;
 
+        //上下文
         Object ctx;
 
+        // 注册的Watcher
         WatchRegistration watchRegistration;
 
+        // 只读
         public boolean readOnly;
 
         /** Convenience ctor */
@@ -300,11 +313,13 @@ public class ClientCnxn {
             this.watchRegistration = watchRegistration;
         }
 
+        //序列化创建byteBuffer记录在bb字段中
         public void createBB() {
             try {
                 ByteArrayOutputStream baos = new ByteArrayOutputStream();
                 BinaryOutputArchive boa = BinaryOutputArchive.getArchive(baos);
                 boa.writeInt(-1, "len"); // We'll fill this in later
+                // 序列化请求头，包含xid和type
                 if (requestHeader != null) {
                     requestHeader.serialize(boa, "header");
                 }
@@ -313,6 +328,7 @@ public class ClientCnxn {
                     // append "am-I-allowed-to-be-readonly" flag
                     boa.writeBool(readOnly, "readOnly");
                 } else if (request != null) {
+                    //序列化request(对于特定请求如GetDataRequest,包含了是否存在watcher的标志位)
                     request.serialize(boa, "request");
                 }
                 baos.close();
@@ -672,6 +688,7 @@ public class ClientCnxn {
        }
     }
 
+    //
     private void finishPacket(Packet p) {
         if (p.watchRegistration != null) {
             p.watchRegistration.register(p.replyHeader.getErr());
@@ -1272,7 +1289,7 @@ public class ClientCnxn {
                             lastPingRwServer = now;
                             idlePingRwServer = 0;
                             pingRwTimeout = Math.min(2*pingRwTimeout, maxPingRwTimeout);
-                            // ping读写server【如果ping到的是读写服务器，就抛异常，然后进行重试】
+                            // ping读写server【如果ping到的是读写服务器，就抛异常，然后进行重试,看下面的cleanup()方法】
                             pingRwServer();
                         }
                         to = Math.min(to, pingRwTimeout - idlePingRwServer);
@@ -1307,6 +1324,8 @@ public class ClientCnxn {
                                             RETRY_CONN_MSG,
                                             e);
                         }
+                        // cleanUp调用后使得ClientCnxnSocketNIO#isConnected为false，
+                        // 因此ClientCnxn.SendThread#run方法又进入了连接的操作
                         cleanup();
                         if (state.isAlive()) {
                             eventThread.queueEvent(new WatchedEvent(
