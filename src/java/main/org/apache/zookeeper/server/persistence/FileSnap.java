@@ -58,7 +58,8 @@ import org.apache.zookeeper.server.util.SerializeUtils;
 //问题：
 // 1) 什么时候生成快照，快照什么时候被删除,会不会被删除
 // 2) 如果zk集群挂了是从哪里恢复，FileSnap还是FileTxn，FileSnap都不一定是最新的，zxid怎么保证?
-
+// 3) FileTxnLog和FileSnap时间先后顺序如何，两者最新的zxid是有固定的大小关系还是没有。
+// 4）回滚，恢复和快照有关系吗？
 public class FileSnap implements SnapShot {
     // snap文件目录
     File snapDir;
