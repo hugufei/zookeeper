@@ -89,6 +89,7 @@ import org.slf4j.LoggerFactory;
  * of available servers to connect to and "transparently" switches servers it is
  * connected to as needed.
  *
+ *
  */
 public class ClientCnxn {
     private static final Logger LOG = LoggerFactory.getLogger(ClientCnxn.class);
@@ -451,28 +452,37 @@ public class ClientCnxn {
         return name + suffix;
     }
 
+    /**
+     * EventThread是客户端ClientCnxn内部的一个事件处理线程，负责客户端的事件处理，并触发客户端注册的Watcher监听。
+     * 1) 从waitingEvents队列中获取数据
+     * 2) 如果是watcher事件通知，触发绑定的watcher逻辑
+     * 3) 如果是异步请求，则调用对应的异步回调函数
+     */
     class EventThread extends ZooKeeperThread {
-        // 这里为什么会用的Object, //临时存放需要被触发的Obj，包含Watcher和AsyncCallBack
-        private final LinkedBlockingQueue<Object> waitingEvents =
-            new LinkedBlockingQueue<Object>();
+        // 临时存放需要被触发的Obj，包含Watcher和AsyncCallBack
+        private final LinkedBlockingQueue<Object> waitingEvents = new LinkedBlockingQueue<Object>();
 
         /** This is really the queued session state until the event
          * thread actually processes the event and hands it to the watcher.
          * But for all intents and purposes this is the state.
          */
+        // 当前session状态
         private volatile KeeperState sessionState = KeeperState.Disconnected;
 
-       private volatile boolean wasKilled = false;
-       private volatile boolean isRunning = false;
+        // 如果需要停止(并没有真的kill)
+        private volatile boolean wasKilled = false;
+
+        // 线程是否在运行(waitingEvents是否在工作)
+        private volatile boolean isRunning = false;
 
         EventThread() {
             super(makeThreadName("-EventThread"));
             setDaemon(true);
         }
 
+        //将WatchedEvent加入waitingEvents队列
         public void queueEvent(WatchedEvent event) {
-            if (event.getType() == EventType.None
-                    && sessionState == event.getState()) {
+            if (event.getType() == EventType.None && sessionState == event.getState()) {
                 return;
             }
             sessionState = event.getState();
@@ -480,32 +490,38 @@ public class ClientCnxn {
             // materialize the watchers based on the event
             // 用WatcherSetEventPair封装watchers和watchedEvent
             WatcherSetEventPair pair = new WatcherSetEventPair(
-                    watcher.materialize(event.getState(), event.getType(),
-                            event.getPath()),
-                            event);
+                    watcher.materialize(event.getState(), event.getType(), event.getPath()), event);
             // queue the pair (watch set & event) for later processing
             // 把通知事件加到waitingEvents
             waitingEvents.add(pair);
         }
 
-       public void queuePacket(Packet packet) {
-          if (wasKilled) {
+        // 当Packet有callback的时候调用。这个Packet带了AsyncCallback
+        public void queuePacket(Packet packet) {
+            // 如果kill掉了
+            if (wasKilled) {
              synchronized (waitingEvents) {
-                if (isRunning) waitingEvents.add(packet);
-                else processEvent(packet);
+                if (isRunning)
+                    //线程在运行，则加入临时队列
+                    waitingEvents.add(packet);
+                else
+                    processEvent(packet);//同步处理Event
              }
           } else {
-             waitingEvents.add(packet);
+             waitingEvents.add(packet); // 加入临时队列
           }
        }
 
+       // 将eventOfDeath加入waitingEvents代表线程将要kill(进行take时才标示wasKilled)
         public void queueEventOfDeath() {
             waitingEvents.add(eventOfDeath);
         }
 
+        // 会不断地从watingEvents中取出Object，识别具体类型（Watcher或AsyncCallback），并分别调用process和processResult接口方法来实现对事件的触发和回调。
+        // 根据eventOfDeath以及waitingEvents.isEmpty()改变两个标示位wasKilled,isRunning
         @Override
         public void run() {
-           try {
+            try {
               isRunning = true;
               while (true) {
                  Object event = waitingEvents.take();
@@ -517,9 +533,10 @@ public class ClientCnxn {
                  }
                  if (wasKilled)
                     synchronized (waitingEvents) {
+                       //当需要被停掉，且临时队列处理完了
                        if (waitingEvents.isEmpty()) {
                           isRunning = false;
-                          break;
+                          break;//跳出while，结束线程
                        }
                     }
               }
@@ -527,26 +544,26 @@ public class ClientCnxn {
               LOG.error("Event thread exiting due to interruption", e);
            }
 
-            LOG.info("EventThread shut down for session: 0x{}",
-                     Long.toHexString(getSessionId()));
+            LOG.info("EventThread shut down for session: 0x{}", Long.toHexString(getSessionId()));
         }
 
+        //对WatchedEvent和Packet两种事件进行处理
        private void processEvent(Object event) {
           try {
-              // 正常的watch事件通知
+              // 如果是watch类型
               if (event instanceof WatcherSetEventPair) {
                   // each watcher will process the event
                   WatcherSetEventPair pair = (WatcherSetEventPair) event;
+                  // 从WatcherSetEventPair这个wraper中取出watchers和event
                   for (Watcher watcher : pair.watchers) {
                       try {
-                          // 每个watch一次处理event，调用具体的实现类了
+                          // 每个watch一次处理event，调用具体的实现类
                           watcher.process(pair.event);
                       } catch (Throwable t) {
                           LOG.error("Error while calling watcher ", t);
                       }
                   }
-              } else {
-                  // AsyncCallback,异步回调
+              } else {// 否则就是AsyncCallBack类型事件
                   Packet p = (Packet) event;
                   int rc = 0;
                   String clientPath = p.clientPath;
@@ -660,7 +677,7 @@ public class ClientCnxn {
         }
 
         if (p.cb == null) {
-            // 操作同步通知
+            // 操作同步通知，唤醒在p上等待的线程
             synchronized (p) {
                 p.finished = true;
                 p.notifyAll();
@@ -738,6 +755,10 @@ public class ClientCnxn {
     /**
      * This class services the outgoing request queue and generates the heart
      * beats. It also spawns the ReadThread.
+     *
+     * 1) 连接服务端并进行重试
+     * 2) 发送ping
+     * 3) doIO
      */
     class SendThread extends ZooKeeperThread {
         private long lastPingSentNs;
@@ -783,6 +804,8 @@ public class ClientCnxn {
                     LOG.debug("Got notification sessionid:0x"
                         + Long.toHexString(sessionId));
                 }
+
+                //从响应中获取 Watcher事件
                 WatcherEvent event = new WatcherEvent();
                 event.deserialize(bbia, "response");
 
@@ -822,11 +845,11 @@ public class ClientCnxn {
                 return;
             }
 
+            //处理响应，从pendingQueue中取出数据
             Packet packet;
             synchronized (pendingQueue) {
                 if (pendingQueue.size() == 0) {
-                    throw new IOException("Nothing in the queue, but got "
-                            + replyHdr.getXid());
+                    throw new IOException("Nothing in the queue, but got " + replyHdr.getXid());
                 }
                 packet = pendingQueue.remove();
             }
