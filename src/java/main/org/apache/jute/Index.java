@@ -30,9 +30,12 @@ package org.apache.jute;
  *   idx.incr();
  * }
  * </code>
- *
  */
+
+//反序列化器的迭代器
 public interface Index {
+    // 是否已经完成
     public boolean done();
+    // 下一项
     public void incr();
 }
