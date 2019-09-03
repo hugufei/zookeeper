@@ -33,6 +33,7 @@ public class ProviderRegistry {
     private static HashMap<String, AuthenticationProvider> authenticationProviders =
         new HashMap<String, AuthenticationProvider>();
 
+    //注册IPAuthenticationProvider 和 DigestAuthenticationProvider
     public static void initialize() {
         synchronized (ProviderRegistry.class) {
             if (initialized)

@@ -46,7 +46,6 @@ import org.slf4j.LoggerFactory;
 // PathTrie只是用来管理配额的,如果一个znode没用到配额，那么它就和PathTrie没有关系
 // 看名字就知道是字典书的实现了，源码也基本是这个思路,不懂可以自己去找字典树相关资料
 
-
  /**
   * zk中的目录 /zookeeper/quota/a/b/c/zookeeper_limits 对应的PathTrie结构为:
   *           root
@@ -61,18 +60,6 @@ import org.slf4j.LoggerFactory;
   *
   * PathTrie中的root即相当于zk目录中的/zookeeper/quota,所以在下面的函数中，path是PathTrie中的path，不是zk中的path，即不会以"/zookeeper/quota"开头
   */
-
-//
-
-//
-//
-//
-//
-//
-//
-//
-//    /
-//
  public class PathTrie {
     /**
      * the logger for this class

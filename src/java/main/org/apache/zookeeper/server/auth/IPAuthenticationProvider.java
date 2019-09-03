@@ -22,6 +22,7 @@ import org.apache.zookeeper.KeeperException;
 import org.apache.zookeeper.data.Id;
 import org.apache.zookeeper.server.ServerCnxn;
 
+//Client端由IP地址验证，譬如172.2.0.0/24
 public class IPAuthenticationProvider implements AuthenticationProvider {
 
     public String getScheme() {

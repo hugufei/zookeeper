@@ -105,13 +105,13 @@ public class DataTree {
     /**
      * the path trie that keeps track fo the quota nodes in this datatree
      */
+    //DataTree的配额功能，PathTrie就是用来管理配额的
     private final PathTrie pTrie = new PathTrie();
 
     /**
      * This hashtable lists the paths of the ephemeral nodes of a session.
      */
-    private final Map<Long, HashSet<String>> ephemerals =
-        new ConcurrentHashMap<Long, HashSet<String>>();
+    private final Map<Long, HashSet<String>> ephemerals = new ConcurrentHashMap<Long, HashSet<String>>();
 
     private final ReferenceCountedACLCache aclCache = new ReferenceCountedACLCache();
 

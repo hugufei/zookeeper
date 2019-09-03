@@ -27,7 +27,9 @@ import org.apache.zookeeper.KeeperException;
 import org.apache.zookeeper.data.Id;
 import org.apache.zookeeper.server.ServerCnxn;
 
+//Client端由用户名和密码验证，譬如user:password，digest的密码生成方式是Sha1摘要的base64形式
 public class DigestAuthenticationProvider implements AuthenticationProvider {
+
     private static final Logger LOG =
         LoggerFactory.getLogger(DigestAuthenticationProvider.class);
 
@@ -96,13 +98,13 @@ public class DigestAuthenticationProvider implements AuthenticationProvider {
         return parts[0] + ":" + base64Encode(digest);
     }
 
-    public KeeperException.Code 
-        handleAuthentication(ServerCnxn cnxn, byte[] authData)
+    public KeeperException.Code handleAuthentication(ServerCnxn cnxn, byte[] authData)
     {
         String id = new String(authData);
         try {
             String digest = generateDigest(id);
             if (digest.equals(superDigest)) {
+                // 在这种scheme情况下，对应的id拥有超级权限，可以做任何事情(cdrwa）
                 cnxn.addAuthInfo(new Id("super", ""));
             }
             cnxn.addAuthInfo(new Id(getScheme(), digest));

@@ -274,38 +274,52 @@ public class PrepRequestProcessor extends ZooKeeperCriticalThread implements
         }
     }
 
-    static void checkACL(ZooKeeperServer zks, List<ACL> acl, int perm,
-            List<Id> ids) throws KeeperException.NoAuthException {
+
+    /**
+     * 在对节点进行操作时，需要验证当前请求以及相关节点是否有对应的权限
+     * @param zks
+     * @param acl 对应节点或者父节点拥有的权限
+     * @param perm 目前操作需要的权限
+     * @param ids 目前请求提供的权限
+     * @throws KeeperException.NoAuthException
+     **/
+    static void checkACL(ZooKeeperServer zks, List<ACL> acl, int perm, List<Id> ids) throws KeeperException.NoAuthException {
+        //如果跳过ACL
         if (skipACL) {
             return;
         }
+        //如果没有要求的ACL
         if (acl == null || acl.size() == 0) {
             return;
         }
+        //如果提供的ACL有超级权限
         for (Id authId : ids) {
             if (authId.getScheme().equals("super")) {
                 return;
             }
         }
+        // 一一匹配
         for (ACL a : acl) {
             Id id = a.getId();
+            // //如果对应的节点拥有perm权限， 按位与
             if ((a.getPerms() & perm) != 0) {
-                if (id.getScheme().equals("world")
-                        && id.getId().equals("anyone")) {
+                if (id.getScheme().equals("world") && id.getId().equals("anyone")) {
                     return;
                 }
-                AuthenticationProvider ap = ProviderRegistry.getProvider(id
-                        .getScheme());
+                //根据策略模式获取对应的认证提供器
+                AuthenticationProvider ap = ProviderRegistry.getProvider(id.getScheme());
                 if (ap != null) {
-                    for (Id authId : ids) {                        
-                        if (authId.getScheme().equals(id.getScheme())
-                                && ap.matches(authId.getId(), id.getId())) {
+                    //用认证器一个个 认证 请求提供的Id
+                    for (Id authId : ids) {
+                        //模式相同并且匹配通过，只要有一个匹配通过就行
+                        if (authId.getScheme().equals(id.getScheme()) && ap.matches(authId.getId(), id.getId())) {
                             return;
                         }
                     }
                 }
             }
         }
+        //如果对应的节点都没有要求的perm权限，那就验证失败，和请求提供什么权限无关
         throw new KeeperException.NoAuthException();
     }
 
@@ -455,8 +469,8 @@ public class PrepRequestProcessor extends ZooKeeperCriticalThread implements
                     throw new KeeperException.InvalidACLException(path);
                 }
                 nodeRecord = getRecordForPath(path);
-                checkACL(zks, nodeRecord.acl, ZooDefs.Perms.ADMIN,
-                        request.authInfo);
+                //检查ACL
+                checkACL(zks, nodeRecord.acl, ZooDefs.Perms.ADMIN, request.authInfo);
                 version = setAclRequest.getVersion();
                 currentVersion = nodeRecord.stat.getAversion();
                 if (version != -1 && version != currentVersion) {
@@ -724,6 +738,7 @@ public class PrepRequestProcessor extends ZooKeeperCriticalThread implements
      * @param acl list of ACLs being assigned to the node (create or setACL operation)
      * @return
      */
+    //在对节点进行create和setACL时涉及权限的创建和修改，主要验证acl列表的合理性
     private boolean fixupACL(List<Id> authInfo, List<ACL> acl) {
         if (skipACL) {
             return true;
@@ -737,24 +752,27 @@ public class PrepRequestProcessor extends ZooKeeperCriticalThread implements
         while (it.hasNext()) {
             ACL a = it.next();
             Id id = a.getId();
+            //如果是固定用户，为所有Client端开放权限
             if (id.getScheme().equals("world") && id.getId().equals("anyone")) {
                 // wide open
-            } else if (id.getScheme().equals("auth")) {
-                // 如果是权限是针对用户设置的
+            }
+            // 如果是设置权限的话
+            else if (id.getScheme().equals("auth")) {
                 // This is the "auth" id, so we have to expand it to the
                 // authenticated ids of the requestor
+                // 如果是auth，把这个acl从List中删掉
                 it.remove();
                 if (toAdd == null) {
                     toAdd = new LinkedList<ACL>();
                 }
                 boolean authIdValid = false;
                 for (Id cid : authInfo) {
-                    AuthenticationProvider ap =
-                        ProviderRegistry.getProvider(cid.getScheme());
+                    //  一般情况下，默认的Id只有IP这一种
+                    // (org.apache.zookeeper.server.NIOServerCnxn.NIOServerCnxn)，里面调用了 authInfo.add(new Id("ip", addr.getHostAddress()));
+                    AuthenticationProvider ap = ProviderRegistry.getProvider(cid.getScheme());
                     if (ap == null) {
-                        LOG.error("Missing AuthenticationProvider for "
-                                + cid.getScheme());
-                    } else if (ap.isAuthenticated()) {
+                        LOG.error("Missing AuthenticationProvider for " + cid.getScheme());
+                    } else if (ap.isAuthenticated()) { //如果验证过了,三种实现中，IP返回false，其他两种返回true
                         authIdValid = true;
                         // 注意这里，这个toAdd后面会用，
                         // 主要逻辑就是针对某一个用户设置的ACL，循环当前所有的用户，针对每一个用户设置的ACL一样的perm，并且构造出新的acl
@@ -765,11 +783,12 @@ public class PrepRequestProcessor extends ZooKeeperCriticalThread implements
                     return false;
                 }
             } else {
-                AuthenticationProvider ap = ProviderRegistry.getProvider(id
-                        .getScheme());
+                //其他认证模式的话,如ip，digest，sasl
+                AuthenticationProvider ap = ProviderRegistry.getProvider(id.getScheme());
                 if (ap == null) {
                     return false;
                 }
+                //如果id的格式不valid
                 if (!ap.isValid(id.getId())) {
                     return false;
                 }
@@ -780,6 +799,7 @@ public class PrepRequestProcessor extends ZooKeeperCriticalThread implements
                 acl.add(a);
             }
         }
+        //确保有一种方式认证通过了
         return acl.size() > 0;
     }
 

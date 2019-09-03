@@ -71,32 +71,42 @@ public class ZooDefs {
         public final int error = -1;
     }
 
+    //节点的权限
     @InterfaceAudience.Public
     public interface Perms {
+        // 00001 - 允许对本节点GetChildren和GetData操作
         int READ = 1 << 0;
 
+        // 00010 - 允许对本节点SetData操作
         int WRITE = 1 << 1;
 
+        // 00100 - 允许对子节点Create操作
         int CREATE = 1 << 2;
 
+        // 01000 - 允许对子节点Delete操作
         int DELETE = 1 << 3;
 
+        // 10000 - 允许对本节点setAcl操作
         int ADMIN = 1 << 4;
 
+        // 11111 - 有所有的权限
         int ALL = READ | WRITE | CREATE | DELETE | ADMIN;
     }
 
+    //包含验证模式schema以及提供验证的内容id
     @InterfaceAudience.Public
     public interface Ids {
         /**
          * This Id represents anyone.
          */
+        // 固定用户为anyone，为所有Client端开放权限
         public final Id ANYONE_ID_UNSAFE = new Id("world", "anyone");
 
         /**
          * This Id is only usable to set ACLs. It will get substituted with the
          * Id's the client authenticated with.
          */
+        // 不使用任何id，代表任何已确认用户
         public final Id AUTH_IDS = new Id("auth", "");
 
         /**

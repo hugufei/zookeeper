@@ -21,6 +21,7 @@ package org.apache.zookeeper.server.auth;
 import org.apache.zookeeper.KeeperException;
 import org.apache.zookeeper.server.ServerCnxn;
 
+//这个有什么用？
 public class SASLAuthenticationProvider implements AuthenticationProvider {
 
     public String getScheme() {
