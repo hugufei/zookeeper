@@ -21,6 +21,8 @@ package org.apache.zookeeper;
 /**
  * a class that represents the stats associated with quotas
  */
+// 就是记录某个节点实际的count和bytes长度信息
+// 在zk中的目录结构为/zookeeper/quota/xxx(可以有多级目录)/statNode
 public class StatsTrack {
     private int count;
     private long bytes;
@@ -40,6 +42,7 @@ public class StatsTrack {
      * to -1.
      * @param stats the stat string to be intialized with
      */
+    //根据 count=int,bytes=long 的一个String进行解析
     public StatsTrack(String stats) {
         if (stats == null) {
             stats = "count=-1,bytes=-1";

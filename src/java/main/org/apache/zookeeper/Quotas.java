@@ -23,6 +23,12 @@ package org.apache.zookeeper;
  * and has many other utils
  * for quota
  */
+// 主要是定义几个管理配额的目录名称，为DataTree处理配额提供定义
+// 1) 限制信息包含对某个路径的要求大小(count或者bytes)
+// 2) 状态信息包含对某个路径的实际大小(count或者bytes)
+// 提供path转换到对应的限制path和状态path的方法
+// /zookeeper/quota/xxx(可以有多级目录)/zookeeper_limits 就是针对/xxx(可以有多级目录)的限制,是理论上的限制
+// /zookeeper/quota/xxx(可以有多级目录)/statNode 就是针对/xxx(可以有多级目录)的真实状态记录
 public class Quotas {
 
     /** the zookeeper nodes that acts as the management and status node **/
@@ -30,18 +36,21 @@ public class Quotas {
 
     /** the zookeeper quota node that acts as the quota
      * management node for zookeeper */
+    //配额目录
     public static final String quotaZookeeper = "/zookeeper/quota";
 
     /**
      * the limit node that has the limit of
      * a subtree
      */
+    //node限制的结尾后缀
     public static final String limitNode = "zookeeper_limits";
 
     /**
      * the stat node that monitors the limit of
      * a subtree.
      */
+    //node实际状态的结尾后缀
     public static final String statNode = "zookeeper_stats";
 
     /**
@@ -50,6 +59,7 @@ public class Quotas {
      * @param path the actual path in zookeeper.
      * @return the limit quota path
      */
+    //zk某个节点path转换成对应的limit path
     public static String quotaPath(String path) {
         return quotaZookeeper + path +
         "/" + limitNode;
@@ -61,6 +71,7 @@ public class Quotas {
      * @param path the actual path in zookeeper
      * @return the stat quota path
      */
+    ////zk某个节点path转换成对应的stat path
     public static String statPath(String path) {
         return quotaZookeeper + path + "/" +
         statNode;
