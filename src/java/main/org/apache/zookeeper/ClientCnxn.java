@@ -571,7 +571,7 @@ public class ClientCnxn {
         //对WatchedEvent和Packet两种事件进行处理
        private void processEvent(Object event) {
           try {
-              // 如果是watch类型
+              // 如果是watch类型，事件调用eventThread.queueEvent入队时已封装成WatcherSetEventPair对象
               if (event instanceof WatcherSetEventPair) {
                   // each watcher will process the event
                   WatcherSetEventPair pair = (WatcherSetEventPair) event;
