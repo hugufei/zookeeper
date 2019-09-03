@@ -131,13 +131,14 @@ public class ZooKeeper {
      * API.
      */
     private static class ZKWatchManager implements ClientWatchManager {
-        private final Map<String, Set<Watcher>> dataWatches =
-            new HashMap<String, Set<Watcher>>();
-        private final Map<String, Set<Watcher>> existWatches =
-            new HashMap<String, Set<Watcher>>();
-        private final Map<String, Set<Watcher>> childWatches =
-            new HashMap<String, Set<Watcher>>();
+        // 针对内容的watch
+        private final Map<String, Set<Watcher>> dataWatches = new HashMap<String, Set<Watcher>>();
+        // 针对exist API相关的watch
+        private final Map<String, Set<Watcher>> existWatches =  new HashMap<String, Set<Watcher>>();
+        // 针对getChildren API相关的watch
+        private final Map<String, Set<Watcher>> childWatches = new HashMap<String, Set<Watcher>>();
 
+        //client传递的,默认的watcher实现
         private volatile Watcher defaultWatcher;
 
         final private void addTo(Set<Watcher> from, Set<Watcher> to) {
@@ -154,13 +155,15 @@ public class ZooKeeper {
         @Override
         public Set<Watcher> materialize(Watcher.Event.KeeperState state,
                                         Watcher.Event.EventType type,
-                                        String clientPath)
-        {
+                                        String clientPath) {
             Set<Watcher> result = new HashSet<Watcher>();
 
             switch (type) {
             case None:
+                // eventType是None ， 则所有dataWatches,existWatches,childWatches都需要被通知,???为什么要这样干
+                // 添加默认watcher
                 result.add(defaultWatcher);
+                //获取clear标记
                 boolean clear = ClientCnxn.getDisableAutoResetWatch() &&
                         state != Watcher.Event.KeeperState.SyncConnected;
 
@@ -190,14 +193,16 @@ public class ZooKeeper {
                         childWatches.clear();
                     }
                 }
-
                 return result;
             case NodeDataChanged:
             case NodeCreated:
+                // 如果节点内容变化或者创建
+                // 从dataWatches中移除，并且添加到result中
                 synchronized (dataWatches) {
-                    // 这里负责移除
+                    // 这里会移除，所以Watcher是一次性的
                     addTo(dataWatches.remove(clientPath), result);
                 }
+                //从existWatches中移除，并且添加到result中
                 synchronized (existWatches) {
                     addTo(existWatches.remove(clientPath), result);
                 }
@@ -224,12 +229,13 @@ public class ZooKeeper {
                 }
                 break;
             default:
+                //默认处理
                 String msg = "Unhandled watch event type " + type
                     + " with state " + state + " on path " + clientPath;
                 LOG.error(msg);
                 throw new RuntimeException(msg);
             }
-
+            //返回结果
             return result;
         }
     }
@@ -237,8 +243,11 @@ public class ZooKeeper {
     /**
      * Register a watcher for a particular path.
      */
+    //client中管理watch注册的类
     abstract class WatchRegistration {
+        // 注册的watcher
         private Watcher watcher;
+        // 监听的znode path
         private String clientPath;
         public WatchRegistration(Watcher watcher, String clientPath)
         {
@@ -246,6 +255,7 @@ public class ZooKeeper {
             this.clientPath = clientPath;
         }
 
+        // 根据response的resultCode来获取所有注册的path以及对应的watcher集合
         abstract protected Map<String, Set<Watcher>> getWatches(int rc);
 
         /**
@@ -253,15 +263,20 @@ public class ZooKeeper {
          * @param rc the result code of the operation that attempted to
          * add the watch on the path.
          */
+        // 根据response的resultCode来注册watcher到一个path
         public void register(int rc) {
+            // 如果可以添加
             if (shouldAddWatch(rc)) {
+                // 获取所有注册的path以及对应的watcher集合
                 Map<String, Set<Watcher>> watches = getWatches(rc);
                 synchronized(watches) {
+                    // 找到该path
                     Set<Watcher> watchers = watches.get(clientPath);
                     if (watchers == null) {
                         watchers = new HashSet<Watcher>();
                         watches.put(clientPath, watchers);
                     }
+                    //添加当前watcher
                     watchers.add(watcher);
                 }
             }
@@ -296,6 +311,7 @@ public class ZooKeeper {
         }
     }
 
+    // getWatches返回 ZooKeeper.ZKWatchManager#dataWatches
     class DataWatchRegistration extends WatchRegistration {
         public DataWatchRegistration(Watcher watcher, String clientPath) {
             super(watcher, clientPath);
@@ -307,6 +323,7 @@ public class ZooKeeper {
         }
     }
 
+    //getWatches返回  ZooKeeper.ZKWatchManager#childWatches
     class ChildWatchRegistration extends WatchRegistration {
         public ChildWatchRegistration(Watcher watcher, String clientPath) {
             super(watcher, clientPath);
@@ -1206,18 +1223,25 @@ public class ZooKeeper {
 
         // the watch contains the un-chroot path
         WatchRegistration wcb = null;
+        // 如果有watcher，就注册
         if (watcher != null) {
+            // 生成一个DataWatchRegistration，即Data的watch的注册
             wcb = new DataWatchRegistration(watcher, clientPath);
         }
-
         final String serverPath = prependChroot(clientPath);
 
+        // 生成请求头
         RequestHeader h = new RequestHeader();
+
+        // 设置请求类型为getData
         h.setType(ZooDefs.OpCode.getData);
         GetDataRequest request = new GetDataRequest();
         request.setPath(serverPath);
+        // 设置标志位,是否函数watch!!!!!!!
         request.setWatch(watcher != null);
         GetDataResponse response = new GetDataResponse();
+
+        //client端提交请求
         ReplyHeader r = cnxn.submitRequest(h, request, response, wcb);
         if (r.getErr() != 0) {
             throw KeeperException.create(KeeperException.Code.get(r.getErr()),

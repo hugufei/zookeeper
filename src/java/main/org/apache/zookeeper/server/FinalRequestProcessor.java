@@ -277,19 +277,23 @@ public class FinalRequestProcessor implements RequestProcessor {
                 rsp = new ExistsResponse(stat);
                 break;
             }
+            //getData请求
             case OpCode.getData: {
                 lastOp = "GETD";
                 GetDataRequest getDataRequest = new GetDataRequest();
-                ByteBufferInputStream.byteBuffer2Record(request.request,
-                        getDataRequest);
+                // 反序列化出getDataRequest
+                ByteBufferInputStream.byteBuffer2Record(request.request,getDataRequest);
+                // 验证path对应的node是否存在
                 DataNode n = zks.getZKDatabase().getNode(getDataRequest.getPath());
                 if (n == null) {
                     throw new KeeperException.NoNodeException();
                 }
+                // 验证ACL权限
                 PrepRequestProcessor.checkACL(zks, zks.getZKDatabase().aclForNode(n),
                         ZooDefs.Perms.READ,
                         request.authInfo);
                 Stat stat = new Stat();
+                // 获取数据，如果有watch标志位，Watcher就传cnxn
                 byte b[] = zks.getZKDatabase().getData(getDataRequest.getPath(), stat,
                         getDataRequest.getWatch() ? cnxn : null);
                 rsp = new GetDataResponse(b, stat);

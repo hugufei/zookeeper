@@ -49,6 +49,9 @@ import org.apache.zookeeper.proto.RequestHeader;
  * Interface to a Server connection - represents a connection from a client
  * to the server.
  */
+// ServerCnxn 是一个 ZooKeeper 客户端和服务器之间的连接接口，代表了一个客户端和服务器的连接.
+// 实现了Watcher接口，有两个子类
+// 作用： 这个Watcher的实现类记录了client和server的连接，回调的时候，可以直接发送response告诉client，有事件触发了
 public abstract class ServerCnxn implements Stats, Watcher {
     // This is just an arbitrary object to represent requests issued by
     // (aka owned by) this class

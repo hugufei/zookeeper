@@ -448,8 +448,11 @@ public class ClientCnxn {
 
     private Object eventOfDeath = new Object();
 
+    //将Event以及对应需要触发的watches集合进行组合绑定
     private static class WatcherSetEventPair {
+        // 事件触发需要被通知的watches集合
         private final Set<Watcher> watchers;
+        // 事件
         private final WatchedEvent event;
 
         public WatcherSetEventPair(Set<Watcher> watchers, WatchedEvent event) {
@@ -497,7 +500,7 @@ public class ClientCnxn {
             setDaemon(true);
         }
 
-        //将WatchedEvent加入waitingEvents队列
+        // 将WatchedEvent加入waitingEvents队列
         public void queueEvent(WatchedEvent event) {
             if (event.getType() == EventType.None && sessionState == event.getState()) {
                 return;
@@ -506,6 +509,7 @@ public class ClientCnxn {
 
             // materialize the watchers based on the event
             // 用WatcherSetEventPair封装watchers和watchedEvent
+            // 这里用到了client中watch的记录,进行相应的get和remove操作
             WatcherSetEventPair pair = new WatcherSetEventPair(
                     watcher.materialize(event.getState(), event.getType(), event.getPath()), event);
             // queue the pair (watch set & event) for later processing
@@ -688,9 +692,11 @@ public class ClientCnxn {
        }
     }
 
-    //
+    // 如果Packet中有通知，则调用watchRegistration的注册方法
     private void finishPacket(Packet p) {
+        // 如果有要注册的watchRegistration
         if (p.watchRegistration != null) {
+            // 根据response code进行注册
             p.watchRegistration.register(p.replyHeader.getErr());
         }
 
@@ -1575,10 +1581,12 @@ public class ClientCnxn {
     public ReplyHeader submitRequest(RequestHeader h, Record request,
             Record response, WatchRegistration watchRegistration)
             throws InterruptedException {
+        //生成回复头
         ReplyHeader r = new ReplyHeader();
         Packet packet = queuePacket(h, r, request, response, null, null, null,
                     null, watchRegistration);
         synchronized (packet) {
+            //如果packet没有处理完,就一直等着
             while (!packet.finished) {
                 //同步获取结果,什么时候唤醒？服务器有响应的时候。。。。
                 packet.wait();
@@ -1608,6 +1616,8 @@ public class ClientCnxn {
         sendThread.sendPacket(p);
     }
 
+    // 请求入队，将请求封装成Packet，加入到outgoingQueue这一发送队列
+    // sendThread是这个队列的消费者，主要看run方法
     Packet queuePacket(RequestHeader h, ReplyHeader r, Record request,
             Record response, AsyncCallback cb, String clientPath,
             String serverPath, Object ctx, WatchRegistration watchRegistration)
@@ -1618,6 +1628,7 @@ public class ClientCnxn {
         // generated later at send-time, by an implementation of ClientCnxnSocket::doIO(),
         // where the packet is actually sent.
         synchronized (outgoingQueue) {
+            //packet中包含了watchRegistration
             packet = new Packet(h, r, request, response, watchRegistration);
             packet.cb = cb;
             packet.ctx = ctx;
@@ -1631,6 +1642,7 @@ public class ClientCnxn {
                 if (h.getType() == OpCode.closeSession) {
                     closing = true;
                 }
+                //放入outgoingQueue即发送队列中
                 outgoingQueue.add(packet);
             }
         }

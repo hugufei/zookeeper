@@ -21,6 +21,7 @@ package org.apache.zookeeper;
 import java.util.Set;
 
 /**
+ * 客户端的WatchManager， 用户根据Event得到需要通知的watcher
  */
 public interface ClientWatchManager {
     /**
@@ -35,6 +36,7 @@ public interface ClientWatchManager {
      * @param path event path
      * @return may be empty set but must not be null
      */
+    // ClientWatchManager负责根据Event得到需要通知的watcher，该manager本身并不进行通知
     public Set<Watcher> materialize(Watcher.Event.KeeperState state,
         Watcher.Event.EventType type, String path);
 }

@@ -69,7 +69,13 @@ import org.slf4j.LoggerFactory;
  * full paths to DataNodes and a tree of DataNodes. All accesses to a path is
  * through the hashtable. The tree is traversed only when serializing to disk.
  */
+// DataTree是内存数据存储的核心，是一个树结构，代表了内存中一份完整的数据。
+// DataTree不包含任何与网络、客户端连接及请求处理相关的业务逻辑，是一个独立的组件。
+// WatchManager 负责 Watcher 事件的触发，它是一个统称
+// 在服务端 DataTree 会托管两个 WatchManager，分别是 dataWatches 和 childWatches
+// 分别对应数据变更 Watcher 和子节点变更 Watcher。
 public class DataTree {
+
     private static final Logger LOG = LoggerFactory.getLogger(DataTree.class);
 
     /**
@@ -511,6 +517,7 @@ public class DataTree {
                 EventType.NodeChildrenChanged);
     }
 
+    // 服务端的setData操作，会触发getData时注册进来的watcher
     public Stat setData(String path, byte data[], int version, long zxid,
             long time) throws KeeperException.NoNodeException {
         Stat s = new Stat();
@@ -533,6 +540,7 @@ public class DataTree {
           this.updateBytes(lastPrefix, (data == null ? 0 : data.length)
               - (lastdata == null ? 0 : lastdata.length));
         }
+        //触发dataWatches
         dataWatches.triggerWatch(path, EventType.NodeDataChanged);
         return s;
     }
@@ -557,8 +565,9 @@ public class DataTree {
         }
     }
 
-    public byte[] getData(String path, Stat stat, Watcher watcher)
-            throws KeeperException.NoNodeException {
+    // 获取数据，这里的watcher如果存在就是ServerCnxn
+    // 如果存在watcher，则注册watcher到server端的dataWatches中
+    public byte[] getData(String path, Stat stat, Watcher watcher) throws KeeperException.NoNodeException {
         DataNode n = nodes.get(path);
         if (n == null) {
             throw new KeeperException.NoNodeException();
@@ -566,8 +575,10 @@ public class DataTree {
         synchronized (n) {
             n.copyStat(stat);
             if (watcher != null) {
+                // 注册watcher到dataWatches
                 dataWatches.addWatch(path, watcher);
             }
+            //返回byte[]
             return n.data;
         }
     }

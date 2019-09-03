@@ -1157,8 +1157,10 @@ public class NIOServerCnxn extends ServerCnxn {
      *
      * @see org.apache.zookeeper.server.ServerCnxnIface#process(org.apache.zookeeper.proto.WatcherEvent)
      */
+    //ServerCnxn对象实现了watch接口，当服务端触发watch回调的时候，走的是这个方法，就是调用客户端
     @Override
     synchronized public void process(WatchedEvent event) {
+        //xid为-1表示为通知
         ReplyHeader h = new ReplyHeader(-1, -1L, 0);
         if (LOG.isTraceEnabled()) {
             ZooTrace.logTraceMessage(LOG, ZooTrace.EVENT_DELIVERY_TRACE_MASK,
@@ -1168,8 +1170,10 @@ public class NIOServerCnxn extends ServerCnxn {
         }
 
         // Convert WatchedEvent to a type that can be sent over the wire
+        // 包装为WatcherEvent来提供网络传输
         WatcherEvent e = event.getWrapper();
 
+        // 给client发送请求,通知WatchedEvent的发生
         sendResponse(h, e, "notification");
     }
 
