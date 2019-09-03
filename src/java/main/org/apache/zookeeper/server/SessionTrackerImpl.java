@@ -40,17 +40,34 @@ import org.apache.zookeeper.common.Time;
  * period. Sessions are thus expired in batches made up of sessions that expire
  * in a given interval.
  */
+// 这个类主要负责会话，会话状态以及会话的创建
+// 客户端与服务端之间任何交互操作都与会话息息相关，如临时节点的生命周期、客户端请求的顺序执行、Watcher通知机制等。
+// Zookeeper的连接与会话就是客户端通过实例化Zookeeper对象来实现客户端与服务端创建并保持TCP连接的过程.
+//
+// 在Zookeeper客户端与服务端成功完成连接创建后，就创建了一个会话，
+// Zookeeper会话在整个运行期间的生命周期中，会在不同的会话状态中之间进行切换，
+// 这些状态可以分为CONNECTING、CONNECTED、RECONNECTING、RECONNECTED、CLOSE等。
+//
 public class SessionTrackerImpl extends ZooKeeperCriticalThread implements SessionTracker {
+
     private static final Logger LOG = LoggerFactory.getLogger(SessionTrackerImpl.class);
 
+    // key是sessionId，value是对应的会话
     HashMap<Long, SessionImpl> sessionsById = new HashMap<Long, SessionImpl>();
 
+    // key是某个过期时间，value是会话集合，表示这个过期时间过后就超时的会话集合
     HashMap<Long, SessionSet> sessionSets = new HashMap<Long, SessionSet>();
 
+    // key是sessionId,value是该会话的超时周期(不是时间点)
     ConcurrentHashMap<Long, Integer> sessionsWithTimeout;
+
+    // 下一个会话的id
     long nextSessionId = 0;
+
+    // 下一次进行超时检测的时间
     long nextExpirationTime;
 
+    // 超时检测的周期，多久检测一次
     int expirationInterval;
 
     public static class SessionImpl implements Session {
@@ -60,10 +77,16 @@ public class SessionTrackerImpl extends ZooKeeperCriticalThread implements Sessi
             this.tickTime = expireTime;
             isClosing = false;
         }
-
+        // 会话id，全局唯一
         final long sessionId;
+
+        // 会话超时时间
         final int timeout;
+
+        //下次会话的超时时间点,会不断刷新
         long tickTime;
+
+        //是否被关闭,如果关闭则不再处理该会话的新请求
         boolean isClosing;
 
         Object owner;
@@ -73,6 +96,9 @@ public class SessionTrackerImpl extends ZooKeeperCriticalThread implements Sessi
         public boolean isClosing() { return isClosing; }
     }
 
+    // 会话id要保证全局唯一，算法如下
+    // id表示配置在myid文件中的值，通常是一个整数，如1、2、3。
+    // 该算法的高8位确定了所在机器，后56位使用当前时间的毫秒表示进行随机。
     public static long initializeNextSession(long id) {
         long nextSid = 0;
         nextSid = (Time.currentElapsedTime() << 24) >>> 8;
@@ -84,8 +110,10 @@ public class SessionTrackerImpl extends ZooKeeperCriticalThread implements Sessi
         HashSet<SessionImpl> sessions = new HashSet<SessionImpl>();
     }
 
+    // 用于server检测client超时之后给client发送 会话关闭的请求
     SessionExpirer expirer;
 
+    // 计算出最近的 一下次统一检测过期的时间, 也就是说按照整除expirationInterval 的时间来分桶
     private long roundToInterval(long time) {
         // We give a one interval grace period
         return (time / expirationInterval + 1) * expirationInterval;
@@ -106,8 +134,10 @@ public class SessionTrackerImpl extends ZooKeeperCriticalThread implements Sessi
         }
     }
 
+    // 超时检测的线程是否在运行
     volatile boolean running = true;
 
+    // 当前时间
     volatile long currentTime;
 
     synchronized public void dumpSessions(PrintWriter pwriter) {
@@ -163,6 +193,9 @@ public class SessionTrackerImpl extends ZooKeeperCriticalThread implements Sessi
         LOG.info("SessionTrackerImpl exited loop!");
     }
 
+    // 为了保持客户端会话的有效性，客户端会在会话超时时间过期范围内向服务端发送PING请求来保持会话的有效性（心跳检测）。
+    // 同时，服务端需要不断地接收来自客户端的心跳检测，并且需要重新激活对应的客户端会话，这个重新激活过程称为TouchSession。
+    // 会话激活不仅能够使服务端检测到对应客户端的存活性，同时也能让客户端自己保持连接状态
     synchronized public boolean touchSession(long sessionId, int timeout) {
         if (LOG.isTraceEnabled()) {
             ZooTrace.logTraceMessage(LOG,
@@ -170,17 +203,20 @@ public class SessionTrackerImpl extends ZooKeeperCriticalThread implements Sessi
                                      "SessionTrackerImpl --- Touch session: 0x"
                     + Long.toHexString(sessionId) + " with timeout " + timeout);
         }
+        // 获取对应的会话
         SessionImpl s = sessionsById.get(sessionId);
         // Return false, if the session doesn't exists or marked as closing
         if (s == null || s.isClosing()) {
             return false;
         }
+        // 计算出新的过期时间
         long expireTime = roundToInterval(Time.currentElapsedTime() + timeout);
         if (s.tickTime >= expireTime) {
             // Nothing needs to be done
             return true;
         }
         SessionSet set = sessionSets.get(s.tickTime);
+        // 从旧的过期时间的"桶"中移除
         if (set != null) {
             set.sessions.remove(s);
         }
@@ -190,6 +226,7 @@ public class SessionTrackerImpl extends ZooKeeperCriticalThread implements Sessi
             set = new SessionSet();
             sessionSets.put(expireTime, set);
         }
+        // 移动到新的过期时间的"桶"中
         set.sessions.add(s);
         return true;
     }
