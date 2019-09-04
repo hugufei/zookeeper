@@ -50,8 +50,7 @@ public abstract class ServerCnxnFactory {
     private static final Logger LOG = LoggerFactory.getLogger(ServerCnxnFactory.class);
 
     // sessionMap is used to speed up closeSession()
-    protected final ConcurrentMap<Long, ServerCnxn> sessionMap =
-            new ConcurrentHashMap<Long, ServerCnxn>();
+    protected final ConcurrentMap<Long, ServerCnxn> sessionMap = new ConcurrentHashMap<Long, ServerCnxn>();
 
     /**
      * The buffer will cause the connection to be close when we do a send.
@@ -72,6 +71,7 @@ public abstract class ServerCnxnFactory {
         return zkServer;
     }
 
+    // 从NIOServerCnxnFactory找到该会话对应的NIOServerCnxn，将其关闭。
     public abstract void closeSession(long sessionId);
 
     public abstract void configure(InetSocketAddress addr,

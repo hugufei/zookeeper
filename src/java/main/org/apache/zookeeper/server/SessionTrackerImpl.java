@@ -56,6 +56,7 @@ public class SessionTrackerImpl extends ZooKeeperCriticalThread implements Sessi
     HashMap<Long, SessionImpl> sessionsById = new HashMap<Long, SessionImpl>();
 
     // key是某个过期时间，value是会话集合，表示这个过期时间过后就超时的会话集合
+    // 按过期时间分桶策略
     HashMap<Long, SessionSet> sessionSets = new HashMap<Long, SessionSet>();
 
     // key是sessionId,value是该会话的超时周期(不是时间点)
@@ -110,7 +111,7 @@ public class SessionTrackerImpl extends ZooKeeperCriticalThread implements Sessi
         HashSet<SessionImpl> sessions = new HashSet<SessionImpl>();
     }
 
-    // 用于server检测client超时之后给client发送 会话关闭的请求
+    // 用于server检测client超时之后给client发送会话关闭的请求
     SessionExpirer expirer;
 
     // 计算出最近的 一下次统一检测过期的时间, 也就是说按照整除expirationInterval 的时间来分桶
@@ -125,6 +126,7 @@ public class SessionTrackerImpl extends ZooKeeperCriticalThread implements Sessi
     {
         super("SessionTracker", listener);
         this.expirer = expirer;
+        //设置默认会话检测间隔
         this.expirationInterval = tickTime;
         this.sessionsWithTimeout = sessionsWithTimeout;
         nextExpirationTime = roundToInterval(Time.currentElapsedTime());
@@ -168,23 +170,30 @@ public class SessionTrackerImpl extends ZooKeeperCriticalThread implements Sessi
         return sw.toString();
     }
 
+    // 检测会话超时的线程入口
+    // 主要流程就是：等到下一次超时检测的周期，把对应的桶中的会话全部标记关闭，给对应client发送 会话关闭的请求
     @Override
     synchronized public void run() {
         try {
             while (running) {
                 currentTime = Time.currentElapsedTime();
+                // 如果下一次超时检测的时间还没到，就等
                 if (nextExpirationTime > currentTime) {
                     this.wait(nextExpirationTime - currentTime);
                     continue;
                 }
                 SessionSet set;
+                // 进行会话清理,这个"桶"中的会话都超时了
                 set = sessionSets.remove(nextExpirationTime);
                 if (set != null) {
                     for (SessionImpl s : set.sessions) {
+                        // 1、标记会话状态为已关闭
                         setSessionClosing(s.sessionId);
+                        // 2、发起会话关闭请求
                         expirer.expire(s);
                     }
                 }
+                // 设置下一次清理的时间
                 nextExpirationTime += expirationInterval;
             }
         } catch (InterruptedException e) {
@@ -196,6 +205,10 @@ public class SessionTrackerImpl extends ZooKeeperCriticalThread implements Sessi
     // 为了保持客户端会话的有效性，客户端会在会话超时时间过期范围内向服务端发送PING请求来保持会话的有效性（心跳检测）。
     // 同时，服务端需要不断地接收来自客户端的心跳检测，并且需要重新激活对应的客户端会话，这个重新激活过程称为TouchSession。
     // 会话激活不仅能够使服务端检测到对应客户端的存活性，同时也能让客户端自己保持连接状态
+
+    // client什么时候会发出激活请求?
+    // 1) 客户端向服务端发送请求，包括读写请求，就会触发会话激活。
+    // 2) 客户端发现在sessionTimeout/3时间内尚未和服务端进行任何通信，那么就会主动发起PING请求，服务端收到该请求后，就会触发会话激活。
     synchronized public boolean touchSession(long sessionId, int timeout) {
         if (LOG.isTraceEnabled()) {
             ZooTrace.logTraceMessage(LOG,
@@ -231,6 +244,7 @@ public class SessionTrackerImpl extends ZooKeeperCriticalThread implements Sessi
         return true;
     }
 
+    //标志会话状态为已关闭
     synchronized public void setSessionClosing(long sessionId) {
         if (LOG.isTraceEnabled()) {
             LOG.info("Session closing: 0x" + Long.toHexString(sessionId));
@@ -242,8 +256,11 @@ public class SessionTrackerImpl extends ZooKeeperCriticalThread implements Sessi
         s.isClosing = true;
     }
 
+    //移除会话
     synchronized public void removeSession(long sessionId) {
+        // sessionsById中移除
         SessionImpl s = sessionsById.remove(sessionId);
+        // sessionsWithTimeout中移除
         sessionsWithTimeout.remove(sessionId);
         if (LOG.isTraceEnabled()) {
             ZooTrace.logTraceMessage(LOG, ZooTrace.SESSION_TRACE_MASK,
@@ -254,6 +271,7 @@ public class SessionTrackerImpl extends ZooKeeperCriticalThread implements Sessi
             SessionSet set = sessionSets.get(s.tickTime);
             // Session expiration has been removing the sessions   
             if(set != null){
+                //sessionSets中移除
                 set.sessions.remove(s);
             }
         }
@@ -275,6 +293,7 @@ public class SessionTrackerImpl extends ZooKeeperCriticalThread implements Sessi
         return nextSessionId++;
     }
 
+    //保存会话信息
     synchronized public void addSession(long id, int sessionTimeout) {
         sessionsWithTimeout.put(id, sessionTimeout);
         if (sessionsById.get(id) == null) {
@@ -292,9 +311,11 @@ public class SessionTrackerImpl extends ZooKeeperCriticalThread implements Sessi
                         + Long.toHexString(id) + " " + sessionTimeout);
             }
         }
+        //会话激活
         touchSession(id, sessionTimeout);
     }
 
+    // 会话检查，如果owner不一致，则抛出SessionMovedException异常
     synchronized public void checkSession(long sessionId, Object owner) throws KeeperException.SessionExpiredException, KeeperException.SessionMovedException {
         SessionImpl session = sessionsById.get(sessionId);
         if (session == null || session.isClosing()) {
@@ -303,6 +324,7 @@ public class SessionTrackerImpl extends ZooKeeperCriticalThread implements Sessi
         if (session.owner == null) {
             session.owner = owner;
         } else if (session.owner != owner) {
+            // 如果owner不一致
             throw new KeeperException.SessionMovedException();
         }
     }

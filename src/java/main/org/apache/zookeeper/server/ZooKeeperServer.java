@@ -125,10 +125,10 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
     static final private long superSecret = 0XB3415C00L;
 
     private final AtomicInteger requestsInProcess = new AtomicInteger(0);
+    // 可以理解为zk serve的事务变更队列,事务还没有完成，尚未同步到内存数据库中的一个队列
     final List<ChangeRecord> outstandingChanges = new ArrayList<ChangeRecord>();
     // this data structure must be accessed under the outstandingChanges lock
-    final HashMap<String, ChangeRecord> outstandingChangesForPath =
-        new HashMap<String, ChangeRecord>();
+    final HashMap<String, ChangeRecord> outstandingChangesForPath = new HashMap<String, ChangeRecord>();
     
     private ServerCnxnFactory serverCnxnFactory;
 
@@ -326,6 +326,7 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
         hzxid.set(zxid);
     }
 
+    //提交会话关闭请求的方式，并立即交付给PreRequestProcessor进行处理。
     private void close(long sessionId) {
         submitRequest(null, sessionId, OpCode.closeSession, 0, null, null);
     }
@@ -350,10 +351,12 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
         }
     }
 
+    //发起会话关闭请求
     public void expire(Session session) {
         long sessionId = session.getSessionId();
         LOG.info("Expiring session 0x" + Long.toHexString(sessionId)
                 + ", timeout of " + session.getTimeout() + "ms exceeded");
+        // 发起会话关闭请求
         close(sessionId);
     }
 
@@ -364,7 +367,8 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
             super(msg);
         }
     }
-    
+
+    // 会话激活
     void touch(ServerCnxn cnxn) throws MissingSessionException {
         if (cnxn == null) {
             return;
@@ -726,7 +730,8 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
         Request si = new Request(cnxn, sessionId, xid, type, bb, authInfo);
         submitRequest(si);
     }
-    
+
+    //提交请求入口
     public void submitRequest(Request si) {
         if (firstProcessor == null) {
             synchronized (this) {
@@ -747,6 +752,7 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
             }
         }
         try {
+            //会话激活
             touch(si.cnxn);
             boolean validpacket = Request.isValid(si.type);
             if (validpacket) {
@@ -1080,18 +1086,20 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
         ProcessTxnResult rc;
         int opCode = hdr.getType();
         long sessionId = hdr.getClientId();
+        //调用内存数据库处理事务
         rc = getZKDatabase().processTxn(hdr, txn);
         if (opCode == OpCode.createSession) {
+            // 如果是创建session，将会话加入到sessionTracker中
             if (txn instanceof CreateSessionTxn) {
                 CreateSessionTxn cst = (CreateSessionTxn) txn;
-                sessionTracker.addSession(sessionId, cst
-                        .getTimeOut());
+                sessionTracker.addSession(sessionId, cst.getTimeOut());
             } else {
                 LOG.warn("*****>>>>> Got "
                         + txn.getClass() + " "
                         + txn.toString());
             }
         } else if (opCode == OpCode.closeSession) {
+            // 如果是关闭session，则移除会话
             sessionTracker.removeSession(sessionId);
         }
         return rc;

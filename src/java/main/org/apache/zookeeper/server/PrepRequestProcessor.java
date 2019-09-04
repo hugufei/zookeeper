@@ -491,26 +491,38 @@ public class PrepRequestProcessor extends ZooKeeperCriticalThread implements
                 zks.setOwner(request.sessionId, request.getOwner());
                 break;
             case OpCode.closeSession:
+                //处理会话管理请求，包括客户端主动发来的，或者服务器自动检测出来的
                 // We don't want to do this check since the session expiration thread
                 // queues up this operation without being the session owner.
                 // this request is the last of the session so it should be ok
                 //zks.sessionTracker.checkSession(request.sessionId, request.getOwner());
-                HashSet<String> es = zks.getZKDatabase()
-                        .getEphemerals(request.sessionId);
+
+                // 获取sessionId对应的临时节点的路径列表.[这里只能列举出已经事务处理完成并且应用到内存数据库中的数据]
+                HashSet<String> es = zks.getZKDatabase().getEphemerals(request.sessionId);
                 synchronized (zks.outstandingChanges) {
+                    // 遍历 zk serve的事务变更队列,这些事务处理尚未完成，没有应用到内存数据库中
                     for (ChangeRecord c : zks.outstandingChanges) {
+                        // 如果当前变更记录没有状态信息(删除时才会出现，参照上面处理delete时的ChangeRecord构造参数)
+                        // 如果是已经有了一个删除的节点，那么es中去掉这条记录(当然原本不一定有这条记录，如果有就去掉),这样避免重复删除
                         if (c.stat == null) {
                             // Doing a delete
+                            // 避免多次删除
                             es.remove(c.path);
-                        } else if (c.stat.getEphemeralOwner() == request.sessionId) {
+                        } else
+                        // 这里的if是针对还没有事务处理完，不存在于内存数据库中的数据，
+                        // 如果变更节点是临时的，且源于当前sessionId(只有创建和修改时，stat不会为null)
+                        // 就是如果变更记录的临时拥有者是当前sessionId的话，就加入es中，再删掉
+                        if (c.stat.getEphemeralOwner() == request.sessionId) {
+                            //添加记录，最终要将添加或者修改的record再删除掉
                             es.add(c.path);
                         }
                     }
+                    // 添加节点 删除事务 的变更记录,将es中所有路径的临时节点都删掉
                     for (String path2Delete : es) {
                         addChangeRecord(new ChangeRecord(request.hdr.getZxid(),
                                 path2Delete, null, 0, null));
                     }
-
+                    //设置会话过期
                     zks.sessionTracker.setSessionClosing(request.sessionId);
                 }
 
@@ -658,6 +670,7 @@ public class PrepRequestProcessor extends ZooKeeperCriticalThread implements
             //create/close session don't require request record
             case OpCode.createSession:
             case OpCode.closeSession:
+                //处理会话关闭请求
                 pRequest2Txn(request.type, zks.getNextZxid(), request, null, true);
                 break;
  
@@ -805,6 +818,7 @@ public class PrepRequestProcessor extends ZooKeeperCriticalThread implements
 
     public void processRequest(Request request) {
         // request.addRQRec(">prep="+zks.outstandingChanges.size());
+        // 发起会话关闭请求这里异步调用，上面完成生产
         submittedRequests.add(request);
     }
 

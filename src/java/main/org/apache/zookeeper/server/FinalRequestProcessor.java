@@ -116,7 +116,7 @@ public class FinalRequestProcessor implements RequestProcessor {
             if (request.hdr != null) {
                TxnHeader hdr = request.hdr;
                Record txn = request.txn;
-
+               //处理事务
                rc = zks.processTxn(hdr, txn);
             }
             // do not add non quorum packets to the queue.
@@ -126,6 +126,7 @@ public class FinalRequestProcessor implements RequestProcessor {
             }
         }
 
+        //关闭NIOServerCnxn
         if (request.hdr != null && request.hdr.getType() == OpCode.closeSession) {
             ServerCnxnFactory scxn = zks.getServerCnxnFactory();
             // this might be possible since
@@ -135,6 +136,7 @@ public class FinalRequestProcessor implements RequestProcessor {
                 // close session response being lost - we've already closed
                 // the session/socket here before we can send the closeSession
                 // in the switch block below
+                // 从NIOServerCnxnFactory找到该会话对应的NIOServerCnxn，将其关闭。
                 scxn.closeSession(request.sessionId);
                 return;
             }

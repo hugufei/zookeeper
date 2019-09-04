@@ -1030,14 +1030,18 @@ public class NIOServerCnxn extends ServerCnxn {
      */
     @Override
     public void close() {
+        //从工厂中移除
         factory.removeCnxn(this);
 
+        //从zkDb中移除NIOServerCnxn，这个本身也是一个Watcher
         if (zkServer != null) {
             zkServer.removeCnxn(this);
         }
 
+        //关闭Socket
         closeSock();
 
+        //取消SelectionKey
         if (sk != null) {
             try {
                 // need to cancel this selection key from the selector

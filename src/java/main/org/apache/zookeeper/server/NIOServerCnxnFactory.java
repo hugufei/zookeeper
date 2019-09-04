@@ -138,6 +138,7 @@ public class NIOServerCnxnFactory extends ServerCnxnFactory implements Runnable 
         return ss.socket().getLocalPort();
     }
 
+    //添加NIOServerCnxn，一个客户端对应一个NIOServerCnxn
     private void addCnxn(NIOServerCnxn cnxn) {
         synchronized (cnxns) {
             cnxns.add(cnxn);
@@ -160,6 +161,7 @@ public class NIOServerCnxnFactory extends ServerCnxnFactory implements Runnable 
         }
     }
 
+    //移除NIOServerCnxn
     public void removeCnxn(NIOServerCnxn cnxn) {
         synchronized(cnxns) {
             // Remove the related session from the sessionMap.
@@ -314,6 +316,7 @@ public class NIOServerCnxnFactory extends ServerCnxnFactory implements Runnable 
         NIOServerCnxn cnxn = (NIOServerCnxn) sessionMap.remove(sessionId);
         if (cnxn != null) {
             try {
+                //关闭NIOServerCnxn
                 cnxn.close();
             } catch (Exception e) {
                 LOG.warn("exception during session close", e);
