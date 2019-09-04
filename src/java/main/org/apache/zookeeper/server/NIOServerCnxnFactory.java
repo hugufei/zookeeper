@@ -77,6 +77,8 @@ public class NIOServerCnxnFactory extends ServerCnxnFactory implements Runnable 
     }
 
     Thread thread;
+
+    //初始化主线程，打开selector,并bind端口，打开NIO的Accept通知
     @Override
     public void configure(InetSocketAddress addr, int maxcc) throws IOException {
         configureSaslLogin();
@@ -93,11 +95,15 @@ public class NIOServerCnxnFactory extends ServerCnxnFactory implements Runnable 
         // 所以这里的这个线程是为了和JVM生命周期绑定，只剩下这个线程时已经没有意义了，应该关闭掉。
         thread.setDaemon(true);
         maxClientCnxns = maxcc;
+        // 打开selector
         this.ss = ServerSocketChannel.open();
         ss.socket().setReuseAddress(true);
         LOG.info("binding to port " + addr);
+        // bind端口
         ss.socket().bind(addr);
+        // 设置非阻塞
         ss.configureBlocking(false);
+        // 打开NIO的Accept通知
         ss.register(selector, SelectionKey.OP_ACCEPT);
     }
 
@@ -120,11 +126,13 @@ public class NIOServerCnxnFactory extends ServerCnxnFactory implements Runnable 
     }
 
     @Override
-    public void startup(ZooKeeperServer zks) throws IOException,
-            InterruptedException {
+    public void startup(ZooKeeperServer zks) throws IOException, InterruptedException {
+        //启动主线程
         start();
         setZooKeeperServer(zks);
+        // 从log和snapshot恢复database和session，并重新生成一个最新的snapshop文件
         zks.startdata();
+        // 启动sessionTracker线程，初始化IO请求的处理链，并启动每个processor
         zks.startup();
     }
 

@@ -52,6 +52,7 @@ public class ZooKeeperServerMain {
     public static void main(String[] args) {
         ZooKeeperServerMain main = new ZooKeeperServerMain();
         try {
+            //单机版启动
             main.initializeAndRun(args);
         } catch (IllegalArgumentException e) {
             LOG.error("Invalid arguments, exiting abnormally", e);
@@ -70,9 +71,8 @@ public class ZooKeeperServerMain {
         System.exit(0);
     }
 
-    protected void initializeAndRun(String[] args)
-        throws ConfigException, IOException
-    {
+    //再次进行配置文件zoo.cfg的解析
+    protected void initializeAndRun(String[] args) throws ConfigException, IOException {
         try {
             ManagedUtil.registerLog4jMBeans();
         } catch (JMException e) {
@@ -86,6 +86,7 @@ public class ZooKeeperServerMain {
             config.parse(args);
         }
 
+        // 创建服务器实例ZooKeeperServer，完成初始化工作
         runFromConfig(config);
     }
 
@@ -94,6 +95,18 @@ public class ZooKeeperServerMain {
      * @param config ServerConfig to use.
      * @throws IOException
      */
+    // 创建服务器实例ZooKeeperServer，完成初始化工作
+    // 1) 创建服务器统计器ServerStats。
+    // 2) 创建Zookeeper数据管理器FileTxnSnapLog
+    // 3) 设置服务器tickTime和会话超时时间限制。
+    // 4) 创建ServerCnxnFactory。
+    // 5) 初始化ServerCnxnFactory。
+    // 6) 启动ServerCnxnFactory主线程
+    // 7) 恢复本地数据。
+    // 8) 创建并启动会话管理器。
+    // 9) 初始化Zookeeper的请求处理链。
+    // 10) 注册JMX服务。
+    // 11) 注册Zookeeper服务器实例。
     public void runFromConfig(ServerConfig config) throws IOException {
         LOG.info("Starting server");
         FileTxnSnapLog txnLog = null;
@@ -102,6 +115,8 @@ public class ZooKeeperServerMain {
             // so rather than spawning another thread, we will just call
             // run() in this thread.
             // create a file logger url from the command line args
+
+            // 1) 创建服务器统计器ServerStats。
             final ZooKeeperServer zkServer = new ZooKeeperServer();
             // Registers shutdown handler which will be used to know the
             // server error or shutdown state changes.
@@ -109,17 +124,21 @@ public class ZooKeeperServerMain {
             zkServer.registerServerShutdownHandler(
                     new ZooKeeperServerShutdownHandler(shutdownLatch));
 
+            // 2) 创建Zookeeper数据管理器FileTxnSnapLog
             txnLog = new FileTxnSnapLog(new File(config.dataLogDir), new File(
                     config.dataDir));
             txnLog.setServerStats(zkServer.serverStats());
             zkServer.setTxnLogFactory(txnLog);
+
+            // 3) 设置服务器tickTime和会话超时时间限制。
             zkServer.setTickTime(config.tickTime);
             zkServer.setMinSessionTimeout(config.minSessionTimeout);
             zkServer.setMaxSessionTimeout(config.maxSessionTimeout);
-            // 获取建立socket工厂，工厂方法模式
+            // 4) 连接工厂。是默认是NIOServerCnxnFactory（是一个线程）
             cnxnFactory = ServerCnxnFactory.createFactory();
-            // 建立socket,默认是NIOServerCnxnFactory（是一个线程）
+            // 5) 初始化主线程，打开selector,并bind端口，打开NIO的Accept通知
             cnxnFactory.configure(config.getClientPortAddress(),config.getMaxClientCnxns());
+            // 6) 启动ServerCnxnFactory主线程
             cnxnFactory.startup(zkServer);
             // Watch status of ZooKeeper server. It will do a graceful shutdown
             // if the server is not running or hits an internal error.

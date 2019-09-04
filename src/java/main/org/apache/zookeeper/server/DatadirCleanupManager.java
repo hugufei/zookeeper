@@ -33,6 +33,11 @@ import org.slf4j.LoggerFactory;
  * 'autopurge.snapRetainCount' number of snapshots and corresponding transaction
  * logs.
  */
+// 历史文件清理器
+// 对事务日志和快照数据文件进行定时清理。
+// 源码见org.apache.zookeeper.server.PurgeTxnLog
+// 比较简单，这里就是有个问题
+// 如果日志清理了，server挂了怎么恢复
 public class DatadirCleanupManager {
 
     private static final Logger LOG = LoggerFactory.getLogger(DatadirCleanupManager.class);

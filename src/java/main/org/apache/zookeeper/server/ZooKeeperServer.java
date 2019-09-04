@@ -400,9 +400,9 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
             jmxServerBean = null;
         }
     }
-    
-    public void startdata() 
-    throws IOException, InterruptedException {
+
+    // 从log和snapshot恢复database和session，并重新生成一个最新的snapshop文件
+    public void startdata() throws IOException, InterruptedException {
         //check to see if zkDb is not null
         if (zkDb == null) {
             zkDb = new ZKDatabase(this.txnLogFactory);
@@ -411,26 +411,35 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
             loadData();
         }
     }
-    
+
+    // 启动sessionTracker线程，初始化IO请求的处理链，并启动每个processor
     public synchronized void startup() {
+        //创建sessionTracker
         if (sessionTracker == null) {
             createSessionTracker();
         }
+        // 启动sessionTracker线程
         startSessionTracker();
+
+        // 初始化请求处理链
         // 这里比较重要，这里设置请求处理器，包括请求前置处理器，和请求后置处理器
         // 注意，集群模式下，learner服务端都对调用这个方法，但是比如FollowerZookeeperServer和ObserverZooKeeperServer都会重写这个方法
         setupRequestProcessors();
 
+        // 注册JMX服务。
         registerJMX();
 
+        // 提供服务：标志服务其状态为RUNNING
         setState(State.RUNNING);
         notifyAll();
     }
 
+    // 初始化Zookeeper的请求处理链。
+    // Zookeeper请求处理方式为责任链模式的实现。会有多个请求处理器依次处理一个客户端请求，在服务器启动时，会将这些请求处理器串联成一个请求处理链。
+    // PrepRequestProcessor --> SyncRequestProcessor --> FinalRequestProcessor
     protected void setupRequestProcessors() {
         RequestProcessor finalProcessor = new FinalRequestProcessor(this);
-        RequestProcessor syncProcessor = new SyncRequestProcessor(this,
-                finalProcessor);
+        RequestProcessor syncProcessor = new SyncRequestProcessor(this, finalProcessor);
         ((SyncRequestProcessor)syncProcessor).start();
         firstProcessor = new PrepRequestProcessor(this, syncProcessor);
         ((PrepRequestProcessor)firstProcessor).start();

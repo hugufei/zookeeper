@@ -74,6 +74,7 @@ public abstract class ServerCnxnFactory {
     // 从NIOServerCnxnFactory找到该会话对应的NIOServerCnxn，将其关闭。
     public abstract void closeSession(long sessionId);
 
+    // 初始化主线程，打开selector,并bind端口，打开NIO的Accept通知
     public abstract void configure(InetSocketAddress addr,
                                    int maxClientCnxns) throws IOException;
 

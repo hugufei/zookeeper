@@ -163,8 +163,9 @@ public class QuorumPeerConfig {
      * @throws IOException
      * @throws ConfigException
      */
-    public void parseProperties(Properties zkProp)
-    throws IOException, ConfigException {
+    // 解析配置文件
+    // zoo.cfg配置运行时的基本参数，如tickTime、dataDir、clientPort等参数。
+    public void parseProperties(Properties zkProp) throws IOException, ConfigException {
         int clientPort = 0;
         String clientPortAddress = null;
         for (Entry<Object, Object> entry : zkProp.entrySet()) {

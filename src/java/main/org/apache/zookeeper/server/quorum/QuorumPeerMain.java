@@ -71,6 +71,8 @@ public class QuorumPeerMain {
     protected QuorumPeer quorumPeer;
 
     /**
+     * 无论单机或集群，在zkServer.cmd和zkServer.sh中都配置了QuorumPeerMain作为启动入口类。
+     *
      * To start the replicated server specify the configuration file name on
      * the command line.
      * @param args path to the configfile
@@ -96,20 +98,23 @@ public class QuorumPeerMain {
         System.exit(0);
     }
 
-    protected void initializeAndRun(String[] args)
-        throws ConfigException, IOException
-    {
+    protected void initializeAndRun(String[] args)throws ConfigException, IOException {
+
         QuorumPeerConfig config = new QuorumPeerConfig();
+
+        // 解析配置文件zoo.cfg
         if (args.length == 1) {
             config.parse(args[0]);
         }
 
         // Start and schedule the the purge task
+        // 创建并启动历史文件清理器DatadirCleanupManager
         DatadirCleanupManager purgeMgr = new DatadirCleanupManager(config
                 .getDataDir(), config.getDataLogDir(), config
                 .getSnapRetainCount(), config.getPurgeInterval());
         purgeMgr.start();
 
+        // 判断当前是集群模式还是单机模式启动。
         if (args.length == 1 && config.servers.size() > 0) {
             // 集群模式
             runFromConfig(config);
