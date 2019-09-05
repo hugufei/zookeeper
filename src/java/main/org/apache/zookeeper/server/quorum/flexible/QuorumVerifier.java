@@ -26,7 +26,8 @@ import java.util.Set;
  * identifiers constitutes a quorum.
  *
  */
-
+// 作为集群验证器，主要完成判断一组server在已给定的配置的server列表中，是否能够构成集群
+// (常常是过半机制)
 public interface QuorumVerifier {
     long getWeight(long id);
     // 用来判断set参数的服务器集合能否构成一个集群，（通常是过半机制，常见实现QuorumMaj）

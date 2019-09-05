@@ -30,6 +30,7 @@ import org.slf4j.LoggerFactory;
  * implementation is straightforward.
  *
  */
+//集群过半验证器
 public class QuorumMaj implements QuorumVerifier {
     private static final Logger LOG = LoggerFactory.getLogger(QuorumMaj.class);
     
