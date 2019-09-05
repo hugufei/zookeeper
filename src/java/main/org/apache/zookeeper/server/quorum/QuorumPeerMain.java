@@ -127,6 +127,27 @@ public class QuorumPeerMain {
         }
     }
 
+    /**
+     * 集群模式启动，大致流程:
+     * 1. 创建ServerCnxnFactory。
+     * 2. 初始化ServerCnxnFactory。
+     * 3. 创建Zookeeper数据管理器FileTxnSnapLog。
+     * 4. 创建QuorumPeer实例。
+     *  --1) Quorum是集群模式下特有的对象，是Zookeeper服务器实例（ZooKeeperServer）的托管者，QuorumPeer代表了集群中的一台机器
+     *  --2) 在运行期间，QuorumPeer会不断检测当前服务器实例的运行状态，同时根据情况发起Leader选举。
+     *
+     * 5. 创建内存数据库ZKDatabase。
+     *  --1) ZKDatabase负责管理ZooKeeper的所有会话记录以及DataTree和事务日志的存储。
+     *
+     * 6.初始化QuorumPeer。
+     *  --1) 将核心组件如FileTxnSnapLog、ServerCnxnFactory、ZKDatabase注册到QuorumPeer中，同时配置QuorumPeer的参数，如服务器列表地址、Leader选举算法和会话超时时间限制等。
+     *
+     * 7. 恢复本地数据。
+     *
+     * 8. 启动ServerCnxnFactory主线程。
+     *
+     */
+
     public void runFromConfig(QuorumPeerConfig config) throws IOException {
       try {
           ManagedUtil.registerLog4jMBeans();

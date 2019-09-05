@@ -136,24 +136,22 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
             this.type = type;
         }
         
-        public QuorumServer(long id, String hostname,
-                            Integer port, Integer electionPort,
-                            LearnerType type) {
-	    this.id = id;
-	    this.hostname=hostname;
-	    // 选举完之后，leader和learner的通信端口
-	    if (port!=null){
-            this.port=port;
-	    }
-	    // 选举之前，各server参与选举的port
-	    if (electionPort!=null){
-            this.electionPort=electionPort;
-	    }
-	    // server类型，为PARTICIPANT 或者 OBSERVER;
-	    if (type!=null){
-            this.type = type;
-	    }
-	    this.recreateSocketAddresses();
+        public QuorumServer(long id, String hostname,Integer port, Integer electionPort,LearnerType type) {
+            this.id = id;
+            this.hostname=hostname;
+            // 选举完之后，leader和learner的通信端口
+            if (port!=null){
+                this.port=port;
+            }
+            // 选举之前，各server参与选举的port
+            if (electionPort!=null){
+                this.electionPort=electionPort;
+            }
+            // server类型，为PARTICIPANT 或者 OBSERVER;
+            if (type!=null){
+                this.type = type;
+            }
+            this.recreateSocketAddresses();
 	}
 
         /**
@@ -645,13 +643,13 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
     
     @Override
     public synchronized void start() {
-        // 加载数据
+        // 从事务日志目录dataLogDir和数据快照目录dataDir中恢复出DataTree数据
         loadDataBase();
-        // 开启读取数据线程
+        // 开启对客户端的连接端口,启动ServerCnxnFactory主线程
         cnxnFactory.start();
         // 进行领导者选举，确定服务器的角色，再针对不同的服务器角色进行初始化
         startLeaderElection();
-        // 本类的run方法
+        // 启动QuorumPeer线程，在该线程中进行服务器状态的检查
         super.start();
     }
 
@@ -717,6 +715,14 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
         responder.running = false;
         responder.interrupt();
     }
+
+    /**
+     * Leader选举算法,集群模式特有
+     * 1) Zookeeper首先会根据自身的服务器ID（SID）、最新的ZXID（lastLoggedZxid）和当前的服务器epoch（currentEpoch）来生成一个初始化投票。
+     * 2）在初始化过程中，每个服务器都会给自己投票。然后，根据zoo.cfg的配置，创建相应Leader选举算法实现
+     * 3）Zookeeper提供了三种默认算法（LeaderElection、AuthFastLeaderElection、FastLeaderElection），可通过zoo.cfg中的electionAlg属性来指定，但现只支持FastLeaderElection选举算法。
+     * 4）在初始化阶段，Zookeeper会创建Leader选举所需的网络I/O层QuorumCnxManager，同时启动对Leader选举端口的监听，等待集群中其他服务器创建连接。
+     */
     synchronized public void startLeaderElection() {
     	try {
             // 生成投票，投给自己
@@ -824,6 +830,7 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
                 this, new ZooKeeperServer.BasicDataTreeBuilder(), this.zkDb));
     }
 
+    // 创建选举算法
     protected Election createElectionAlgorithm(int electionAlgorithm){
         Election le=null;
                 
@@ -894,6 +901,7 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
         LOG.debug("Starting quorum peer");
         try {
             jmxQuorumBean = new QuorumBean(this);
+            // 注册JMX服务。
             MBeanRegistry.getInstance().register(jmxQuorumBean, null);
             // 循环所有server
             for(QuorumServer s: getView().values()){
@@ -1551,6 +1559,7 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
         return authInitialized;
     }
 
+    // 初始化负责各台服务器之间的底层Leader选举过程中的网络通信
     public QuorumCnxManager createCnxnManager() {
         return new QuorumCnxManager(this.getId(),
                                     this.getView(),

@@ -44,31 +44,54 @@ import org.apache.zookeeper.server.quorum.flexible.QuorumHierarchical;
 import org.apache.zookeeper.server.quorum.flexible.QuorumMaj;
 import org.apache.zookeeper.server.quorum.flexible.QuorumVerifier;
 
+//集群版配置
 @InterfaceAudience.Public
 public class QuorumPeerConfig {
     private static final Logger LOG = LoggerFactory.getLogger(QuorumPeerConfig.class);
 
+    // 暴露给客户端的port
     protected InetSocketAddress clientPortAddress;
+
+    // 快照日志目录
     protected String dataDir;
+
+    // 事务日志目录
     protected String dataLogDir;
+
+    // tick时间，默认三秒，用于在minSessionTimeout以及maxSessionTimeout没有配置时，提供默认值
     protected int tickTime = ZooKeeperServer.DEFAULT_TICK_TIME;
     protected int maxClientCnxns = 60;
     /** defaults to -1 if not set explicitly */
+    // 如果没有显式配置，默认-1,在QuorumPeer.getMinSessionTimeout()中，如果没有显式配置，则返回tickTime * 2
     protected int minSessionTimeout = -1;
     /** defaults to -1 if not set explicitly */
+    // 如果没有显式配置，默认-1,在QuorumPeer.getMaxSessionTimeout中，如果没有显式配置，则返回tickTime * 20
     protected int maxSessionTimeout = -1;
 
+    // 初始化阶段，learner和leader的通信读取超时时间，最长为initLimit*tickTime
     protected int initLimit;
+    // 在初始化阶段之后的请求阶段Learner和Leader通信的读取超时时间
     protected int syncLimit;
-    protected int electionAlg = 3;
-    protected int electionPort = 2182;
-    protected boolean quorumListenOnAllIPs = false;
-    protected final HashMap<Long,QuorumServer> servers =
-        new HashMap<Long, QuorumServer>();
-    protected final HashMap<Long,QuorumServer> observers =
-        new HashMap<Long, QuorumServer>();
 
+    // =3，即对应FastLeaderElection
+    protected int electionAlg = 3;
+
+    //默认2182,即选举用的端口
+    protected int electionPort = 2182;
+
+    //该参数设置为true，Zookeeper服务器将监听所有可用IP地址的连接。他会影响ZAB协议和快速Leader选举协
+    protected boolean quorumListenOnAllIPs = false;
+
+    //集群中所有server列表,key为集群中每台机器的serverId，value为QuorumServer
+    protected final HashMap<Long,QuorumServer> servers = new HashMap<Long, QuorumServer>();
+
+    //集群中所有处于观察者的server列表,key为集群中每台机器的serverId，value为QuorumServer
+    protected final HashMap<Long,QuorumServer> observers = new HashMap<Long, QuorumServer>();
+
+    //即sid，从dataDir下的"myid"文件得到的long型，代表该server的id
     protected long serverId;
+
+
     protected HashMap<Long, Long> serverWeight = new HashMap<Long, Long>();
     protected HashMap<Long, Long> serverGroup = new HashMap<Long, Long>();
     protected int numGroups = 0;
@@ -77,6 +100,7 @@ public class QuorumPeerConfig {
     protected int purgeInterval = 0;
     protected boolean syncEnabled = true;
 
+    //learner分两种：PARTICIPANT 和 OBSERVER;这里默认PARTICIPANT
     protected LearnerType peerType = LearnerType.PARTICIPANT;
 
     /** Configurations for the quorumpeer-to-quorumpeer sasl authentication */
