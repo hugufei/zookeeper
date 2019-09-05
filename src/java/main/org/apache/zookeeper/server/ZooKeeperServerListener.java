@@ -20,6 +20,8 @@ package org.apache.zookeeper.server;
 /**
  * Listener for the critical resource events.
  */
+
+// 表示接收到异常时，通知zk状态变更为ERROR
 public interface ZooKeeperServerListener {
 
     /**
@@ -31,5 +33,6 @@ public interface ZooKeeperServerListener {
      * @param errorCode
      *            - error code
      */
+    //用于在线程发生严重问题时，通知server
     void notifyStopping(String threadName, int errorCode);
 }

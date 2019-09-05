@@ -48,6 +48,8 @@ import org.apache.zookeeper.common.Time;
 // Zookeeper会话在整个运行期间的生命周期中，会在不同的会话状态中之间进行切换，
 // 这些状态可以分为CONNECTING、CONNECTED、RECONNECTING、RECONNECTED、CLOSE等。
 //
+// 这个类继承了ZooKeeperCriticalThread，发生异常时调用handleException处理异常
+//
 public class SessionTrackerImpl extends ZooKeeperCriticalThread implements SessionTracker {
 
     private static final Logger LOG = LoggerFactory.getLogger(SessionTrackerImpl.class);
@@ -197,6 +199,7 @@ public class SessionTrackerImpl extends ZooKeeperCriticalThread implements Sessi
                 nextExpirationTime += expirationInterval;
             }
         } catch (InterruptedException e) {
+            //异常处理
             handleException(this.getName(), e);
         }
         LOG.info("SessionTrackerImpl exited loop!");

@@ -26,7 +26,10 @@ import org.apache.zookeeper.server.ZooKeeperServer.State;
  * SHUTDOWN server state transitions, which in turn releases the associated
  * shutdown latch.
  */
+// 在zk状态为ERROR或SHUTDOWN时，完成zk的关闭操作
+// 主要就是计数器-1，完成ZooKeeperServer的shutDown()操作
 class ZooKeeperServerShutdownHandler {
+
     private final CountDownLatch shutdownLatch;
 
     ZooKeeperServerShutdownHandler(CountDownLatch shutdownLatch) {
@@ -39,6 +42,7 @@ class ZooKeeperServerShutdownHandler {
      * @param state new server state
      */
     void handle(State state) {
+        // 关闭处理器handle，shutdownLatch.countDown
         if (state == State.ERROR || state == State.SHUTDOWN) {
             shutdownLatch.countDown();
         }

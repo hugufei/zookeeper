@@ -121,6 +121,7 @@ public class ZooKeeperServerMain {
             // Registers shutdown handler which will be used to know the
             // server error or shutdown state changes.
             final CountDownLatch shutdownLatch = new CountDownLatch(1);
+            // 配置ShutdownHandler，发生异常时调用shutdownLatch.countDown()
             zkServer.registerServerShutdownHandler(
                     new ZooKeeperServerShutdownHandler(shutdownLatch));
 
@@ -142,6 +143,8 @@ public class ZooKeeperServerMain {
             cnxnFactory.startup(zkServer);
             // Watch status of ZooKeeper server. It will do a graceful shutdown
             // if the server is not running or hits an internal error.
+
+            // 7) 如果发生异常，则这个代码被唤醒，执行下面的shutdown逻辑
             shutdownLatch.await();
             shutdown();
 
