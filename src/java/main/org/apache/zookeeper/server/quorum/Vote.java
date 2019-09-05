@@ -72,12 +72,14 @@ public class Vote {
         this.state = state;
         this.peerEpoch = peerEpoch;
     }
-    
-    public Vote(long id, 
-                    long zxid, 
-                    long electionEpoch, 
-                    long peerEpoch, 
-                    ServerState state) {
+
+
+    //两个vote的全序大小比较规则总结:
+    // 依次根据peerEpoch，zxid,，sid来
+    //1) peerEpoch代表所处周期，越大则投票越新
+    //2) peerEpoch相同时，zxid代表一个周期中的事务记录，越大则投票越新
+    //3) peerEpoch，zxid均相同时，sid大的赢（两个投票一样新，只是为了决定leader需要有大小关系）
+    public Vote(long id,long zxid, long electionEpoch, long peerEpoch, ServerState state) {
         this.id = id;
         this.zxid = zxid;
         this.electionEpoch = electionEpoch;
@@ -87,15 +89,34 @@ public class Vote {
     }
     
     final private int version;
-    
+
+    //被推举的Leader的SID。
     final private long id;
-    
+
+    //被推举的Leader事务ID。
     final private long zxid;
-    
+
+    //逻辑时钟，用来判断多个投票是否在同一轮选举周期中，该值在服务端是一个自增序列，每次进入新一轮的投票后，都会对该值进行加1操作。
     final private long electionEpoch;
-    
+
+    // 被推举的Leader的epoch。
+    // 这个字段有什么用？
+    // FastLeaderElection#totalOrderPredicate 比较两个vote的大小关系的时候，会先用peerEpoch进行比较
     final private long peerEpoch;
-    
+
+    /**
+     * electionEpoch和peerEpoch区别,什么时候会不同?
+     *
+     * 1) electionEpoch是选举周期，用于判断是不是同一个选举周期，从0开始累计
+     * 2) peerEpoch是当前周期,用于判断各个server所处的周期，从log中读取currentEpoch
+     *
+     * 选举leader时:
+     * 1) electionEpoch作为大判断条件，要求大家按最新的electionEpoch作为选举周期
+     * 2) 如果electionEpoch一样，那么再根据currentEpoch和zxid，sid等判断哪个server是最“新”的
+     *
+     */
+
+
     public int getVersion() {
         return version;
     }
@@ -120,6 +141,7 @@ public class Vote {
         return state;
     }
 
+    // 当前服务器的状态。
     final private ServerState state;
     
     @Override

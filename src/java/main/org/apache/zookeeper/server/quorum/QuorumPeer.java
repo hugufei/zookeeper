@@ -336,17 +336,20 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
     /**
      * This is who I think the leader currently is.
      */
+    //每次选leader时，最后决定下来的投票，一般都是最终的leader
     volatile private Vote currentVote;
     
     /**
      * ... and its counterpart for backward compatibility
      */
     volatile private Vote bcVote;
-        
+
+    //是每次选leader时，最后决定下来的投票，一般都是最终的leader
     public synchronized Vote getCurrentVote(){
         return currentVote;
     }
-       
+
+    // startLeaderElection的时候会设置称自己
     public synchronized void setCurrentVote(Vote v){
         currentVote = v;
     }
@@ -1396,6 +1399,8 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
     public QuorumCnxManager getQuorumCnxManager() {
         return qcm;
     }
+
+    //
     private long readLongFromFile(String name) throws IOException {
     	File file = new File(logFactory.getSnapDir(), name);
 		BufferedReader br = new BufferedReader(new FileReader(file));
@@ -1452,6 +1457,7 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
         }
     }
 
+    //获取当前server的epoch,如果currentEpoch=-1,则从currentEpoch文件读取
     public long getCurrentEpoch() throws IOException {
 		if (currentEpoch == -1) {
 			currentEpoch = readLongFromFile(CURRENT_EPOCH_FILENAME);

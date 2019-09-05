@@ -307,7 +307,7 @@ public class QuorumCnxManager {
     /**
      * Thread to send connection request to peer server.
      *
-     * 发出线程线程
+     * 发出链接线程
      */
     private class QuorumConnectionReqThread extends ZooKeeperThread {
         final Socket sock;
