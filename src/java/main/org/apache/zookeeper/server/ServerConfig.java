@@ -38,21 +38,22 @@ public class ServerConfig {
     //// to update the "conf" 4letter word
     ////
 
-    // 暴露给client的ip:port
+    // 暴露给zk client的端口
     protected InetSocketAddress clientPortAddress;
-    // 指定内存树快照的存储位置
+    // 快照日志目录
     protected String dataDir;
-    // 指定事务记录的存储位置
+    // 事务日志目录
     protected String dataLogDir;
+    // tick时间,用于在minSessionTimeout以及maxSessionTimeout没有配置时，提供默认值,默认3s
     protected int tickTime = ZooKeeperServer.DEFAULT_TICK_TIME;
 
     // 最多允许多少个client连接
     protected int maxClientCnxns;
     /** defaults to -1 if not set explicitly */
-    // 可以接受client的最小session过期时间
+    // 用于限制客户端会话超时检测的最短时间
     protected int minSessionTimeout = -1;
     /** defaults to -1 if not set explicitly */
-    // 可以接受client的最大session过期时间
+    // 用于限制客户端会话超时检测的最长时间
     protected int maxSessionTimeout = -1;
 
     /**
