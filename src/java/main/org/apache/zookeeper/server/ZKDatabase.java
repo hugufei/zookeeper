@@ -215,6 +215,7 @@ public class ZKDatabase {
      * @return the last valid zxid on disk
      * @throws IOException
      */
+    //从日志中恢复dataTree和session,返回最后的事务id
     public long loadDataBase() throws IOException {
         long zxid = snapLog.restore(dataTree, sessionsWithTimeouts, commitProposalPlaybackListener);
         initialized = true;

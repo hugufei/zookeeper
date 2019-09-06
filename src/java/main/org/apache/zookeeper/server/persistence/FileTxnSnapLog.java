@@ -177,7 +177,7 @@ public class FileTxnSnapLog {
      * @return the highest zxid restored
      * @throws IOException
      */
-    // 根据日志中恢复dataTree和session
+    // 从日志中恢复dataTree和session
     public long restore(DataTree dt, Map<Long, Integer> sessions, PlayBackListener listener) throws IOException {
         // 根据snap文件反序列化dt和sessions
         snapLog.deserialize(dt, sessions);
