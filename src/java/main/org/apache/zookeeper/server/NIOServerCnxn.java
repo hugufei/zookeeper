@@ -107,8 +107,8 @@ public class NIOServerCnxn extends ServerCnxn {
     // 默认的，能够容忍的 已提交但是尚未回复的请求数，后面会重新赋值
     int outstandingLimit = 1;
 
-    public NIOServerCnxn(ZooKeeperServer zk, SocketChannel sock,
-            SelectionKey sk, NIOServerCnxnFactory factory) throws IOException {
+    //
+    public NIOServerCnxn(ZooKeeperServer zk, SocketChannel sock, SelectionKey sk, NIOServerCnxnFactory factory) throws IOException {
         this.zkServer = zk;
         this.sock = sock;
         this.sk = sk;

@@ -35,6 +35,8 @@ import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+// 即是NIOServerCnxn的工厂类，
+// 又是一个处理客户端连接和读写请求的Reactor线程
 public class NIOServerCnxnFactory extends ServerCnxnFactory implements Runnable {
     private static final Logger LOG = LoggerFactory.getLogger(NIOServerCnxnFactory.class);
 
@@ -62,9 +64,10 @@ public class NIOServerCnxnFactory extends ServerCnxnFactory implements Runnable 
     */
     final ByteBuffer directBuffer = ByteBuffer.allocateDirect(64 * 1024);
 
-    final HashMap<InetAddress, Set<NIOServerCnxn>> ipMap =
-        new HashMap<InetAddress, Set<NIOServerCnxn>>( );
+    // 每个client地址对应的连接集合,用于管理一个ip最大允许的连接数
+    final HashMap<InetAddress, Set<NIOServerCnxn>> ipMap = new HashMap<InetAddress, Set<NIOServerCnxn>>( );
 
+    // 每个client允许的最大连接数量
     int maxClientCnxns = 60;
 
     /**
@@ -76,6 +79,7 @@ public class NIOServerCnxnFactory extends ServerCnxnFactory implements Runnable 
     public NIOServerCnxnFactory() throws IOException {
     }
 
+    //后台跑的线程.守护线程
     Thread thread;
 
     //初始化主线程，打开selector,并bind端口，打开NIO的Accept通知
@@ -117,6 +121,7 @@ public class NIOServerCnxnFactory extends ServerCnxnFactory implements Runnable 
         maxClientCnxns = max;
     }
 
+    // 集群版启动:集群则根据角色划分，涉及到数据同步等
     @Override
     public void start() {
         // ensure thread is started once and only once
@@ -125,6 +130,7 @@ public class NIOServerCnxnFactory extends ServerCnxnFactory implements Runnable 
         }
     }
 
+    // 单机版启动:可以直接从日志，快照等恢复数据
     @Override
     public void startup(ZooKeeperServer zks) throws IOException, InterruptedException {
         //启动主线程
@@ -146,7 +152,7 @@ public class NIOServerCnxnFactory extends ServerCnxnFactory implements Runnable 
         return ss.socket().getLocalPort();
     }
 
-    //添加NIOServerCnxn，一个客户端对应一个NIOServerCnxn
+    // 在验证最大连接数条件ok之后，添加Cnxn记录
     private void addCnxn(NIOServerCnxn cnxn) {
         synchronized (cnxns) {
             cnxns.add(cnxn);
@@ -193,16 +199,18 @@ public class NIOServerCnxnFactory extends ServerCnxnFactory implements Runnable 
         }
     }
 
-    protected NIOServerCnxn createConnection(SocketChannel sock,
-            SelectionKey sk) throws IOException {
+    //创建NIOServerCnxn,构造函数里会对sk注册对 读感兴趣
+    protected NIOServerCnxn createConnection(SocketChannel sock, SelectionKey sk) throws IOException {
         return new NIOServerCnxn(zkServer, sock, sk, this);
     }
 
+    //获取同一个client地址的连接数
     private int getClientCnxnCount(InetAddress cl) {
         // The ipMap lock covers both the map, and its contents
         // (that is, the cnxn sets shouldn't be modified outside of
         // this lock)
         synchronized (ipMap) {
+            //拿到对应ServerCnxn集合
             Set<NIOServerCnxn> s = ipMap.get(cl);
             if (s == null) return 0;
             return s.size();
@@ -214,40 +222,45 @@ public class NIOServerCnxnFactory extends ServerCnxnFactory implements Runnable 
         // selector是跟nio有关系的，我们看核心代码
         while (!ss.socket().isClosed()) {
             try {
+                // 一秒 轮询一次 IO时间
                 selector.select(1000);
                 Set<SelectionKey> selected;
                 synchronized (this) {
                     selected = selector.selectedKeys();
                 }
                 ArrayList<SelectionKey> selectedList = new ArrayList<SelectionKey>(selected);
+                // 随机打乱
                 Collections.shuffle(selectedList);
+                // 根据SelectionKey处理连接请求 或者 I/O 事件
                 for (SelectionKey k : selectedList) {
                     //接受到的是连接事件
                     if ((k.readyOps() & SelectionKey.OP_ACCEPT) != 0) {
                         // 建立连接
                         SocketChannel sc = ((ServerSocketChannel) k.channel()).accept();
                         InetAddress ia = sc.socket().getInetAddress();
+                        // 获取当前client对应的连接数
                         int cnxncount = getClientCnxnCount(ia);
-                        // 如果连接数太大,则报错
+                        // 如果当前client的连接数太大,则报错
                         if (maxClientCnxns > 0 && cnxncount >= maxClientCnxns){
                             LOG.warn("Too many connections from " + ia + " - max is " + maxClientCnxns );
                             sc.close();
                         } else {
                             LOG.info("Accepted socket connection from " + sc.socket().getRemoteSocketAddress());
+                            // 设置非阻塞
                             sc.configureBlocking(false);
                             // 注册read事件
                             SelectionKey sk = sc.register(selector,SelectionKey.OP_READ);
                             // 创建连接，构建NIOServerCnxn
                             NIOServerCnxn cnxn = createConnection(sc, sk);
-                            // 附加对象
+                            // 附加对象。【这样就可以通过SelectionKey关联到对应的NIOServerCnxn了！！！！！！！】
                             sk.attach(cnxn);
-                            // 缓存NIOServerCnxn
+                            // 加入cnxns和ipMap记录
                             addCnxn(cnxn);
                         }
                     } else if ((k.readyOps() & (SelectionKey.OP_READ | SelectionKey.OP_WRITE)) != 0) { // 读写就绪时调用
-                        // 接收数据,这里会间歇性的接收到客户端ping
+                        // 取出附件cnxn 【接收数据,这里会间歇性的接收到客户端ping】
                         NIOServerCnxn c = (NIOServerCnxn) k.attachment();
-                        // 调用doIO
+                        // 处理IO操作
                         c.doIO(k);
                     } else {
                         if (LOG.isDebugEnabled()) {
@@ -263,6 +276,7 @@ public class NIOServerCnxnFactory extends ServerCnxnFactory implements Runnable 
                 LOG.warn("Ignoring exception", e);
             }
         }
+        // 结束关闭所有连接
         closeAll();
         LOG.info("NIOServerCnxn factory exited run method");
     }

@@ -50,17 +50,22 @@ public abstract class ServerCnxnFactory {
     private static final Logger LOG = LoggerFactory.getLogger(ServerCnxnFactory.class);
 
     // sessionMap is used to speed up closeSession()
+    // 每个session对应的ServerCnxn对象
     protected final ConcurrentMap<Long, ServerCnxn> sessionMap = new ConcurrentHashMap<Long, ServerCnxn>();
 
     /**
      * The buffer will cause the connection to be close when we do a send.
      */
+    // 代表关闭的请求
     static final ByteBuffer closeConn = ByteBuffer.allocate(0);
 
+    // 本地端口
     public abstract int getLocalPort();
-    
+
+    //所有ServerCnxn的迭代器
     public abstract Iterable<ServerCnxn> getConnections();
 
+    // 获取活动的连接数
     public int getNumAliveConnections() {
         synchronized(cnxns) {
             return cnxns.size();
@@ -71,32 +76,42 @@ public abstract class ServerCnxnFactory {
         return zkServer;
     }
 
+    // 关闭某个session
     // 从NIOServerCnxnFactory找到该会话对应的NIOServerCnxn，将其关闭。
     public abstract void closeSession(long sessionId);
 
-    // 初始化主线程，打开selector,并bind端口，打开NIO的Accept通知
-    public abstract void configure(InetSocketAddress addr,
-                                   int maxClientCnxns) throws IOException;
+    // 配置地址，以及最大client连接数等
+    // 核心流程：初始化主线程，打开selector,并bind端口，打开NIO的Accept通知
+    public abstract void configure(InetSocketAddress addr, int maxClientCnxns) throws IOException;
 
     protected SaslServerCallbackHandler saslServerCallbackHandler;
+
     public Login login;
 
     /** Maximum number of connections allowed from particular host (ip) */
+    // 获取每个host的最大连接数,默认60
     public abstract int getMaxClientCnxnsPerHost();
 
     /** Maximum number of connections allowed from particular host (ip) */
+    // 设置每个host的最大连接数
     public abstract void setMaxClientCnxnsPerHost(int max);
 
-    public abstract void startup(ZooKeeperServer zkServer)
-        throws IOException, InterruptedException;
+    // 单机版启动
+    public abstract void startup(ZooKeeperServer zkServer) throws IOException, InterruptedException;
 
+    // 等待线程结束
     public abstract void join() throws InterruptedException;
 
+    // 关闭socket，线程
     public abstract void shutdown();
 
+    // 集群版启动
     public abstract void start();
 
+    //zk服务器
     protected ZooKeeperServer zkServer;
+
+
     final public void setZooKeeperServer(ZooKeeperServer zk) {
         this.zkServer = zk;
         if (zk != null) {
@@ -104,14 +119,17 @@ public abstract class ServerCnxnFactory {
         }
     }
 
+    // 关闭所有ServerCnxn
     public abstract void closeAll();
-    
+
+    // 创建工厂类
     static public ServerCnxnFactory createFactory() throws IOException {
-        String serverCnxnFactoryName =
-            System.getProperty(ZOOKEEPER_SERVER_CNXN_FACTORY);
+        // 默认是NIOServerCnxnFactory
+        String serverCnxnFactoryName = System.getProperty(ZOOKEEPER_SERVER_CNXN_FACTORY);
         if (serverCnxnFactoryName == null) {
             serverCnxnFactoryName = NIOServerCnxnFactory.class.getName();
         }
+        //反射调用构造函数
         try {
             ServerCnxnFactory serverCnxnFactory = (ServerCnxnFactory) Class.forName(serverCnxnFactoryName)
                     .getDeclaredConstructor().newInstance();
@@ -124,34 +142,37 @@ public abstract class ServerCnxnFactory {
             throw ioe;
         }
     }
-    
-    static public ServerCnxnFactory createFactory(int clientPort,
-            int maxClientCnxns) throws IOException
-    {
+
+    //创建工厂，并配置地址和最大线程数
+    static public ServerCnxnFactory createFactory(int clientPort,int maxClientCnxns) throws IOException {
         return createFactory(new InetSocketAddress(clientPort), maxClientCnxns);
     }
 
-    static public ServerCnxnFactory createFactory(InetSocketAddress addr,
-            int maxClientCnxns) throws IOException
-    {
+    //创建工厂，并配置地址和最大线程数
+    static public ServerCnxnFactory createFactory(InetSocketAddress addr,int maxClientCnxns) throws IOException{
         ServerCnxnFactory factory = createFactory();
         factory.configure(addr, maxClientCnxns);
         return factory;
     }
 
+    // 获取本地地址
     public abstract InetSocketAddress getLocalAddress();
 
-    private final Map<ServerCnxn, ConnectionBean> connectionBeans
-        = new ConcurrentHashMap<ServerCnxn, ConnectionBean>();
+    //每个ServerCnxn对应的jmx数据
+    private final Map<ServerCnxn, ConnectionBean> connectionBeans = new ConcurrentHashMap<ServerCnxn, ConnectionBean>();
 
+    // 所有ServerCnxn对象的集合
     protected final HashSet<ServerCnxn> cnxns = new HashSet<ServerCnxn>();
+
+    //连接解绑（JMX?）
     public void unregisterConnection(ServerCnxn serverCnxn) {
         ConnectionBean jmxConnectionBean = connectionBeans.remove(serverCnxn);
         if (jmxConnectionBean != null){
             MBeanRegistry.getInstance().unregister(jmxConnectionBean);
         }
     }
-    
+
+    //连接绑定（JMX?）
     public void registerConnection(ServerCnxn serverCnxn) {
         if (zkServer != null) {
             ConnectionBean jmxConnectionBean = new ConnectionBean(serverCnxn, zkServer);
@@ -162,9 +183,9 @@ public abstract class ServerCnxnFactory {
                 LOG.warn("Could not register connection", e);
             }
         }
-
     }
 
+    // 添加会话信息
     public void addSession(long sessionId, ServerCnxn cnxn) {
         sessionMap.put(sessionId, cnxn);
     }
