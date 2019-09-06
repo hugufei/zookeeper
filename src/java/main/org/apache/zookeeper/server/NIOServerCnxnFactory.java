@@ -219,33 +219,35 @@ public class NIOServerCnxnFactory extends ServerCnxnFactory implements Runnable 
                 synchronized (this) {
                     selected = selector.selectedKeys();
                 }
-                ArrayList<SelectionKey> selectedList = new ArrayList<SelectionKey>(
-                        selected);
+                ArrayList<SelectionKey> selectedList = new ArrayList<SelectionKey>(selected);
                 Collections.shuffle(selectedList);
                 for (SelectionKey k : selectedList) {
+                    //接受到的是连接事件
                     if ((k.readyOps() & SelectionKey.OP_ACCEPT) != 0) {
                         // 建立连接
-                        SocketChannel sc = ((ServerSocketChannel) k
-                                .channel()).accept();
+                        SocketChannel sc = ((ServerSocketChannel) k.channel()).accept();
                         InetAddress ia = sc.socket().getInetAddress();
                         int cnxncount = getClientCnxnCount(ia);
+                        // 如果连接数太大,则报错
                         if (maxClientCnxns > 0 && cnxncount >= maxClientCnxns){
-                            LOG.warn("Too many connections from " + ia
-                                     + " - max is " + maxClientCnxns );
+                            LOG.warn("Too many connections from " + ia + " - max is " + maxClientCnxns );
                             sc.close();
                         } else {
-                            LOG.info("Accepted socket connection from "
-                                     + sc.socket().getRemoteSocketAddress());
+                            LOG.info("Accepted socket connection from " + sc.socket().getRemoteSocketAddress());
                             sc.configureBlocking(false);
-                            SelectionKey sk = sc.register(selector,
-                                    SelectionKey.OP_READ);
+                            // 注册read事件
+                            SelectionKey sk = sc.register(selector,SelectionKey.OP_READ);
+                            // 创建连接，构建NIOServerCnxn
                             NIOServerCnxn cnxn = createConnection(sc, sk);
+                            // 附加对象
                             sk.attach(cnxn);
+                            // 缓存NIOServerCnxn
                             addCnxn(cnxn);
                         }
-                    } else if ((k.readyOps() & (SelectionKey.OP_READ | SelectionKey.OP_WRITE)) != 0) {
+                    } else if ((k.readyOps() & (SelectionKey.OP_READ | SelectionKey.OP_WRITE)) != 0) { // 读写就绪时调用
                         // 接收数据,这里会间歇性的接收到客户端ping
                         NIOServerCnxn c = (NIOServerCnxn) k.attachment();
+                        // 调用doIO
                         c.doIO(k);
                     } else {
                         if (LOG.isDebugEnabled()) {

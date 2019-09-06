@@ -54,40 +54,57 @@ import org.apache.zookeeper.server.util.OSMXBean;
 /**
  * This class handles communication with clients using NIO. There is one per
  * client, but only one thread doing the communication.
+ *
+ * 继承了ServerCnxn抽象类，用NIO来处理与客户端之间的通信，单线程处理。
  */
 public class NIOServerCnxn extends ServerCnxn {
+
     static final Logger LOG = LoggerFactory.getLogger(NIOServerCnxn.class);
 
+    // ServerCnxn工厂
     NIOServerCnxnFactory factory;
 
+    // 针对面向流的连接套接字的可选择通道
     final SocketChannel sock;
 
+    // 对于ACCEPT，CONNECT，READ，WRITE感兴趣的key组合
     protected final SelectionKey sk;
 
+    // 是否初始化完成
     boolean initialized;
 
+    // 分配四个字节缓冲区,用于读取len长度,空间大小绝对不会变
     ByteBuffer lenBuffer = ByteBuffer.allocate(4);
 
+    // 读取输入流，会根据读取到的len再分配对应的长度
     ByteBuffer incomingBuffer = lenBuffer;
 
+    // 输入的缓冲队列
     LinkedBlockingQueue<ByteBuffer> outgoingBuffers = new LinkedBlockingQueue<ByteBuffer>();
 
+    // 会话超时时间
     int sessionTimeout;
 
+    //zkServer服务器
     protected final ZooKeeperServer zkServer;
 
     /**
      * The number of requests that have been submitted but not yet responded to.
      */
+    // 已提交但是尚未回复的请求数
     int outstandingRequests;
 
     /**
      * This is the id that uniquely identifies the session of a client. Once
      * this session is no longer active, the ephemeral nodes will go away.
      */
+    // 会话ID
     long sessionId;
 
+    // 下个会话ID
     static long nextSessionId = 1;
+
+    // 默认的，能够容忍的 已提交但是尚未回复的请求数，后面会重新赋值
     int outstandingLimit = 1;
 
     public NIOServerCnxn(ZooKeeperServer zk, SocketChannel sock,
@@ -99,23 +116,28 @@ public class NIOServerCnxn extends ServerCnxn {
         if (this.factory.login != null) {
             this.zooKeeperSaslServer = new ZooKeeperSaslServer(factory.login);
         }
+        // 获取能够容忍的 接收到但是还没有回复的请求的数量
         if (zk != null) { 
             outstandingLimit = zk.getGlobalOutstandingLimit();
         }
+        // 设置TCP连接无延迟
         sock.socket().setTcpNoDelay(true);
         /* set socket linger to false, so that socket close does not
          * block */
         sock.socket().setSoLinger(false, -1);
-        InetAddress addr = ((InetSocketAddress) sock.socket()
-                .getRemoteSocketAddress()).getAddress();
+        //获取客户端的IP地址并将此信息进行记录
+        InetAddress addr = ((InetSocketAddress) sock.socket().getRemoteSocketAddress()).getAddress();
         // 让本地有权限
         authInfo.add(new Id("ip", addr.getHostAddress()));
+
+        // 初始对READ感兴趣(之前已经连接上了，即处理过ACCEPT了)
         sk.interestOps(SelectionKey.OP_READ);
     }
 
     /* Send close connection packet to the client, doIO will eventually
      * close the underlying machinery (like socket, selectorkey, etc...)
      */
+    //发送"关闭"的buffer
     public void sendCloseSession() {
         sendBuffer(ServerCnxnFactory.closeConn);
     }
@@ -125,12 +147,14 @@ public class NIOServerCnxn extends ServerCnxn {
      * calls to selector and then close the socket
      * @param bb
      */
+    //同步发送
     void sendBufferSync(ByteBuffer bb) {
        try {
            /* configure socket to be blocking
             * so that we dont have to do write in 
             * a tight while loop
             */
+           //设置阻塞
            sock.configureBlocking(true);
            if (bb != ServerCnxnFactory.closeConn) {
                if (sock.isOpen()) {
@@ -142,7 +166,8 @@ public class NIOServerCnxn extends ServerCnxn {
            LOG.error("Error sending data synchronously ", ie);
        }
     }
-    
+
+    //发送数据
     public void sendBuffer(ByteBuffer bb) {
         try {
             internalSendBuffer(bb);
@@ -158,13 +183,16 @@ public class NIOServerCnxn extends ServerCnxn {
      *
      * @param bb Buffer to send.
      */
+    // 发送数据： 如果不是"关闭"的ByteBuffer，如果能用NIO的方式就用NIO的方式，加入outgoingBuffers队列，否则就直接同步发送了
     protected void internalSendBuffer(ByteBuffer bb) {
+        // 如果不是"关闭"的回复
         if (bb != ServerCnxnFactory.closeConn) {
             // We check if write interest here because if it is NOT set,
             // nothing is queued, so we can try to send the buffer right
             // away without waking up the selector
-            if(sk.isValid() &&
-                    ((sk.interestOps() & SelectionKey.OP_WRITE) == 0)) {
+
+            // 如果目前selectionKey还未注册WRITE(代表不能用NIO的方式)，则直接写
+            if(sk.isValid() &&((sk.interestOps() & SelectionKey.OP_WRITE) == 0)) {
                 try {
                     sock.write(bb);
                 } catch (IOException e) {
@@ -172,26 +200,33 @@ public class NIOServerCnxn extends ServerCnxn {
                 }
             }
             // if there is nothing left to send, we are done
+            // 如果读取完内容，则更新发包次数
             if (bb.remaining() == 0) {
                 packetSent();
                 return;
             }
         }
 
+        // 添加到发送缓存队列
         synchronized(this.factory){
             sk.selector().wakeup();
             if (LOG.isTraceEnabled()) {
                 LOG.trace("Add a buffer to outgoingBuffers, sk " + sk
                         + " is valid: " + sk.isValid());
             }
+            // 添加到发送缓存队列
             outgoingBuffers.add(bb);
             if (sk.isValid()) {
+                //注册WRITE事件
                 sk.interestOps(sk.interestOps() | SelectionKey.OP_WRITE);
             }
         }
     }
 
     /** Read the request payload (everything following the length prefix) */
+    // 读取payload请求，即非cmd的请求
+    // payload:翻译是"有效载荷"，代表s的是前面四个字节的int代表len，后续有对应len长度的buffer
+    // 非payload:前面四个字节int，对应ServerCnxn中定义的不同cmd，如“conf”(对应int 1668247142)，“cons”(对应 1668247155)等，不同的cmd后续可能跟着不同的，特定长度的buffer
     private void readPayload() throws IOException, InterruptedException {
         if (incomingBuffer.remaining() != 0) { // have we read length bytes?
             int rc = sock.read(incomingBuffer); // sock is non-blocking, so ok
@@ -203,16 +238,19 @@ public class NIOServerCnxn extends ServerCnxn {
             }
         }
 
+        //读完了
         if (incomingBuffer.remaining() == 0) { // have we read length bytes?
-            packetReceived();// 计数
+            packetReceived();// 更新统计数据
             incomingBuffer.flip();
             if (!initialized) {
+                // 读取连接请求
                 readConnectRequest();
             } else {
-                // 往下
+                // 往下.读取请求
                 readRequest();
             }
             lenBuffer.clear();
+            // 还原成只读4个字节的byte
             incomingBuffer = lenBuffer;
         }
     }
@@ -236,6 +274,7 @@ public class NIOServerCnxn extends ServerCnxn {
     /**
      * Handles read/write IO on connection.
      */
+    // 核心函数
     void doIO(SelectionKey k) throws InterruptedException {
         try {
             if (isSocketOpen() == false) {
@@ -244,6 +283,10 @@ public class NIOServerCnxn extends ServerCnxn {
 
                 return;
             }
+            // 如果可读
+            // 1) 那么根据最开始4个字节的int，判断是否是payload
+            // 2)如果不是payload的话，代表是cmd，调用对应的处理函数写进printWriter
+            // 3)如果是payload的话，分配对应len的空间给buffer，读取后续请求内容
             if (k.isReadable()) {
                 int rc = sock.read(incomingBuffer);
                 if (rc < 0) {
@@ -256,13 +299,14 @@ public class NIOServerCnxn extends ServerCnxn {
                     boolean isPayload;
                     if (incomingBuffer == lenBuffer) { // start of next request
                         incomingBuffer.flip();
-                        // 校验长度
+                        // //读取len，判断是否是payload
                         isPayload = readLength(k);
                         incomingBuffer.clear();
                     } else {
                         // continuation
                         isPayload = true;
                     }
+                    //如果是payload
                     if (isPayload) { // not the case for 4letterword
                         // 往下
                         readPayload();
@@ -274,11 +318,14 @@ public class NIOServerCnxn extends ServerCnxn {
                     }
                 }
             }
+            // 如果可写:
+            // 那么遍历outgoingBuffers,然后每次写满一个64k的buffer空间（可能有分片的操作），然后进行发送
             if (k.isWritable()) {
                 // ZooLog.logTraceMessage(LOG,
                 // ZooLog.CLIENT_DATA_PACKET_TRACE_MASK
                 // "outgoingBuffers.size() = " +
                 // outgoingBuffers.size());
+                // 发送队列不为空
                 if (outgoingBuffers.size() > 0) {
                     // ZooLog.logTraceMessage(LOG,
                     // ZooLog.CLIENT_DATA_PACKET_TRACE_MASK,
@@ -291,18 +338,19 @@ public class NIOServerCnxn extends ServerCnxn {
                      * with data from the non-direct buffers that we need to
                      * send.
                      */
+                    //默认64KB
                     ByteBuffer directBuffer = factory.directBuffer;
                     directBuffer.clear();
 
                     for (ByteBuffer b : outgoingBuffers) {
+                        // 如果分配空间剩余不够，就进行分片
                         if (directBuffer.remaining() < b.remaining()) {
                             /*
                              * When we call put later, if the directBuffer is to
                              * small to hold everything, nothing will be copied,
                              * so we've got to slice the buffer if it's too big.
                              */
-                            b = (ByteBuffer) b.slice().limit(
-                                    directBuffer.remaining());
+                            b = (ByteBuffer) b.slice().limit(directBuffer.remaining());
                         }
                         /*
                          * put() is going to modify the positions of both
@@ -314,6 +362,7 @@ public class NIOServerCnxn extends ServerCnxn {
                         int p = b.position();
                         directBuffer.put(b);
                         b.position(p);
+                        //写满一个buffer
                         if (directBuffer.remaining() == 0) {
                             break;
                         }
@@ -322,8 +371,10 @@ public class NIOServerCnxn extends ServerCnxn {
                      * Do the flip: limit becomes position, position gets set to
                      * 0. This sets us up for the write.
                      */
+                    //写满了切换为只读模式
                     directBuffer.flip();
 
+                    // 写入socket
                     int sent = sock.write(directBuffer);
                     ByteBuffer bb;
 
@@ -334,6 +385,7 @@ public class NIOServerCnxn extends ServerCnxn {
                             throw new CloseRequestException("close requested");
                         }
                         int left = bb.remaining() - sent;
+                        // 如果还有内容没有发送
                         if (left > 0) {
                             /*
                              * We only partially sent this buffer, so we update
@@ -342,6 +394,7 @@ public class NIOServerCnxn extends ServerCnxn {
                             bb.position(bb.position() + sent);
                             break;
                         }
+                        // 更新统计数据
                         packetSent();
                         /* We've sent the whole buffer, so drop the buffer */
                         sent -= bb.remaining();
@@ -352,6 +405,7 @@ public class NIOServerCnxn extends ServerCnxn {
                     // outgoingBuffers.size() = " + outgoingBuffers.size());
                 }
 
+                //更改读写状态
                 synchronized(this.factory){
                     if (outgoingBuffers.size() == 0) {
                         if (!initialized
@@ -393,10 +447,12 @@ public class NIOServerCnxn extends ServerCnxn {
         }
     }
 
+    //读取非连接的请求
     private void readRequest() throws IOException {
         zkServer.processPacket(this, incomingBuffer);
     }
-    
+
+    // 增加尚未处理的请求个数
     protected void incrOutstandingRequests(RequestHeader h) {
         if (h.getXid() >= 0) {
             synchronized (this) {
@@ -404,6 +460,7 @@ public class NIOServerCnxn extends ServerCnxn {
             }
             synchronized (this.factory) {        
                 // check throttling
+                // 如果超过阈值了，就禁止读
                 if (zkServer.getInProcess() > outstandingLimit) {
                     if (LOG.isDebugEnabled()) {
                         LOG.debug("Throttling recv " + zkServer.getInProcess());
@@ -435,11 +492,13 @@ public class NIOServerCnxn extends ServerCnxn {
         }
     }
 
+    //读取连接请求,调用ZooKeeperServer相关逻辑
     private void readConnectRequest() throws IOException, InterruptedException {
         if (!isZKServerRunning()) {
             throw new IOException("ZooKeeperServer not running");
         }
         zkServer.processConnectRequest(this, incomingBuffer);
+        // 标记初始化完成
         initialized = true;
     }
 
@@ -450,6 +509,7 @@ public class NIOServerCnxn extends ServerCnxn {
      * @param pwriter
      *            the pwriter for a command socket
      */
+    // 对应cmd处理器写完printWriter之后进行关闭
     private void cleanupWriterSocket(PrintWriter pwriter) {
         try {
             if (pwriter != null) {
@@ -473,7 +533,11 @@ public class NIOServerCnxn extends ServerCnxn {
      * than cons'ing up a response fully in memory, which may be large
      * for some commands, this class chunks up the result.
      */
+    // 该类用来将给客户端的响应进行分块
+    // 避免response太大，没有写完而一直占用空间,因此对response分块
     private class SendBufferWriter extends Writer {
+
+        //
         private StringBuffer sb = new StringBuffer();
         
         /**
@@ -481,7 +545,9 @@ public class NIOServerCnxn extends ServerCnxn {
          * @param force force sending, even if not a full chunk
          */
         private void checkFlush(boolean force) {
+            // 当强制发送并且sb大小大于0，或者sb大小大于2048即发送缓存
             if ((force && sb.length() > 0) || sb.length() > 2048) {
+                //sockChannel完成对应的发送
                 sendBufferSync(ByteBuffer.wrap(sb.toString().getBytes()));
                 // clear our internal buffer
                 sb.setLength(0);
@@ -491,18 +557,22 @@ public class NIOServerCnxn extends ServerCnxn {
         @Override
         public void close() throws IOException {
             if (sb == null) return;
+            // 关闭之前需要强制性发送缓存
             checkFlush(true);
             sb = null; // clear out the ref to ensure no reuse
         }
 
         @Override
         public void flush() throws IOException {
+            //强制发送
             checkFlush(true);
         }
 
         @Override
         public void write(char[] cbuf, int off, int len) throws IOException {
+            //sb写入内容
             sb.append(cbuf, off, len);
+            //非强制发送
             checkFlush(false);
         }
     }
@@ -516,6 +586,8 @@ public class NIOServerCnxn extends ServerCnxn {
      * maps to a corresponding 4 letter command. CommandThread
      * is the abstract class from which all the others inherit.
      */
+    // 用于处理ServerCnxn中的定义的命令，如"ruok","stmk".
+    // 其主要逻辑定义在commandRun方法中，在子类中各自实现，每个命令使用单独的线程进行处理。
     private abstract class CommandThread extends Thread {
         PrintWriter pw;
         
@@ -532,7 +604,8 @@ public class NIOServerCnxn extends ServerCnxn {
                 cleanupWriterSocket(pw);
             }
         }
-        
+
+        //子类实现commandRun，完成对应操作，写入PrintWriter就行。
         public abstract void commandRun() throws IOException;
     }
     
@@ -869,8 +942,8 @@ public class NIOServerCnxn extends ServerCnxn {
     }
 
     /** Return if four letter word found and responded to, otw false **/
-    private boolean checkFourLetterWord(final SelectionKey k, final int len)
-    throws IOException
+    // 验证int值是否对应特定的cmd，是的话写入对应回复到PrintWriter
+    private boolean checkFourLetterWord(final SelectionKey k, final int len) throws IOException
     {
         // We take advantage of the limited size of the length to look
         // for cmds. They are all 4-bytes which fits inside of an int
@@ -1108,7 +1181,8 @@ public class NIOServerCnxn extends ServerCnxn {
             }
         }
     }
-    
+
+    //4字节，代表长度
     private final static byte fourBytes[] = new byte[4];
 
     /*
@@ -1117,6 +1191,7 @@ public class NIOServerCnxn extends ServerCnxn {
      * @see org.apache.zookeeper.server.ServerCnxnIface#sendResponse(org.apache.zookeeper.proto.ReplyHeader,
      *      org.apache.jute.Record, java.lang.String)
      */
+    //主要是进行一些序列化的操作，然后把对应长度len写入，方便client读,完成一些数据统计，更新的操作
     @Override
     synchronized public void sendResponse(ReplyHeader h, Record r, String tag) {
         try {
@@ -1124,8 +1199,10 @@ public class NIOServerCnxn extends ServerCnxn {
             // Make space for length
             BinaryOutputArchive bos = BinaryOutputArchive.getArchive(baos);
             try {
+                //先加入四个字节，代表长度
                 baos.write(fourBytes);
                 bos.writeRecord(h, "header");
+                //写入记录数据
                 if (r != null) {
                     bos.writeRecord(r, tag);
                 }
@@ -1133,8 +1210,10 @@ public class NIOServerCnxn extends ServerCnxn {
             } catch (IOException e) {
                 LOG.error("Error serializing response");
             }
+            //baos转字节数组
             byte b[] = baos.toByteArray();
             ByteBuffer bb = ByteBuffer.wrap(b);
+            // 把len-4放入byteBuffer，代表后续内容的长度
             bb.putInt(b.length - 4).rewind();
             // 将bb加入到outgoingBuffers中去
             sendBuffer(bb);
@@ -1144,9 +1223,9 @@ public class NIOServerCnxn extends ServerCnxn {
                 }
                 // check throttling
                 synchronized (this.factory) {        
-                    if (zkServer.getInProcess() < outstandingLimit
-                            || outstandingRequests < 1) {
+                    if (zkServer.getInProcess() < outstandingLimit || outstandingRequests < 1) {
                         sk.selector().wakeup();
+                        //开启写
                         enableRecv();
                     }
                 }

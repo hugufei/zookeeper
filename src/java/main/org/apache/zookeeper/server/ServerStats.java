@@ -27,7 +27,9 @@ import java.util.concurrent.atomic.AtomicLong;
 /**
  * Basic Server Statistics
  *
- * 服务器状态类
+ * Stats用于记录一个client到server的数据
+ * ServerStats记录所有client到server的数据
+ * 相当于前者是个体，后者是集体的关系
  */
 public class ServerStats {
     // 发送包个数

@@ -22,6 +22,10 @@ import java.util.Date;
 
 /**
  * Statistics on the ServerCnxn
+ *
+ * Stats用于记录一个client到server的数据
+ * ServerStats记录所有client到server的数据
+ * 相当于前者是个体，后者是集体的关系
  */
 interface Stats {
     /** Date/time the connection was established
