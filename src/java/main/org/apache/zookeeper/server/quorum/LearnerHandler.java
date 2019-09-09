@@ -470,6 +470,7 @@ public class LearnerHandler extends ZooKeeperThread {
                                     }
                                 }
                                 queuePacket(propose.packet);
+                                //
                                 QuorumPacket qcommit = new QuorumPacket(Leader.COMMIT, propose.packet.getZxid(),
                                         null, null);
                                 queuePacket(qcommit);

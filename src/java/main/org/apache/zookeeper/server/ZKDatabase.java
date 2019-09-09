@@ -453,6 +453,7 @@ public class ZKDatabase {
      * @param ia the input archive you want to deserialize from
      * @throws IOException
      */
+    //从leader复制一份镜像数据到本地内存
     public void deserializeSnapshot(InputArchive ia) throws IOException {
         clear();
         SerializeUtils.deserializeSnapshot(getDataTree(),ia,getSessionWithTimeOuts());

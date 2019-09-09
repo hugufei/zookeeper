@@ -56,6 +56,9 @@ import org.slf4j.LoggerFactory;
 /**
  * This class has the control logic for the Leader.
  */
+// Leader服务器是Zookeeper集群工作的核心，其主要工作如下
+// (1) 事务请求的唯一调度和处理者，保证集群事务处理的顺序性。
+// (2) 集群内部各服务器的调度者。
 public class Leader {
     private static final Logger LOG = LoggerFactory.getLogger(Leader.class);
     
@@ -217,18 +220,24 @@ public class Leader {
     /**
      * This message is for follower to expect diff
      */
+    // Leader->Learner，用于通知Learner服务器，Leader即将与其进行DIFF方式的数据同步
+    // 代表LEADER后续会告诉LEARNER：不断接收PROPOSAL和COMMIT，一步步提交让LEARNER从B变成B1，到B2。。。最后到A的样子
     final static int DIFF = 13;
     
     /**
      * This is for follower to truncate its logs 
      */
+    // 用于触发Learner服务器进行内存数据库的回滚操作
+    // 回滚到某个zxid后，后面也会跟着一堆INFORM和COMMIT
     final static int TRUNC = 14;
     
     /**
      * This is for follower to download the snapshots
      */
+    // 用于通知Learner服务器，Leader即将与其进行SNAP方式的数据同步
+    // 代表LEADER直接告诉LEARNER:我长得样子是A，你copy一下变成我的样子就好了
     final static int SNAP = 15;
-    
+
     /**
      * This tells the leader that the connecting peer is actually an observer
      */
@@ -250,6 +259,7 @@ public class Leader {
      * This message type is sent by the leader to indicate that the follower is
      * now uptodate andt can start responding to clients.
      */
+    //用于告知Learner服务器已经完成了数据同步，可以对外提供服务
     final static int UPTODATE = 12;
 
     /**
@@ -312,7 +322,8 @@ public class Leader {
     ConcurrentLinkedQueue<Proposal> toBeApplied = new ConcurrentLinkedQueue<Proposal>();
 
     Proposal newLeaderProposal = new Proposal();
-    
+
+    //LearnerCnxAcceptor负责接收所有非Leader服务器的连接请求。
     class LearnerCnxAcceptor extends ZooKeeperThread{
         private volatile boolean stop = false;
 
@@ -374,6 +385,7 @@ public class Leader {
      * @throws IOException
      * @throws InterruptedException
      */
+    //
     void lead() throws IOException, InterruptedException {
         self.end_fle = Time.currentElapsedTime();
         long electionTimeTaken = self.end_fle - self.start_fle;
@@ -392,6 +404,7 @@ public class Leader {
 
             // Start thread that waits for connection requests from 
             // new followers.
+            //等待learner的连接
             cnxAcceptor = new LearnerCnxAcceptor();
             cnxAcceptor.start();
             
@@ -869,6 +882,8 @@ public class Leader {
     }
     // VisibleForTesting
     protected Set<Long> connectingFollowers = new HashSet<Long>();
+
+    //如果learner的epoch比自己高，更新自己的
     public long getEpochToPropose(long sid, long lastAcceptedEpoch) throws InterruptedException, IOException {
         synchronized(connectingFollowers) {
             if (!waitingForNewEpoch) {

@@ -36,6 +36,9 @@ import org.apache.zookeeper.txn.TxnHeader;
  *
  * See ZOOKEEPER-368 for a discussion of this feature. 
  */
+// Observer充当观察者角色，观察Zookeeper集群的最新状态变化并将这些状态同步过来，
+// 其对于非事务请求可以进行独立处理，对于事务请求，则会转发给Leader服务器进行处理。
+// Observer不会参与任何形式的投票，包括事务请求Proposal的投票和Leader选举投票。
 public class Observer extends Learner{      
 
     Observer(QuorumPeer self,ObserverZooKeeperServer observerZooKeeperServer) {
