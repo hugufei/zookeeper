@@ -87,7 +87,7 @@ public class ProposalRequestProcessor implements RequestProcessor {
         } else {
             // 先交给下一个nextProcessor，一般是CommitProcessor处理。【加入CommitProcessor的queuedRequests队列】
             nextProcessor.processRequest(request);
-            // //如果请求头不为空(是事务请求)
+            // 如果请求头不为空(是事务请求)
             if (request.hdr != null) {
                 // We need to sync and get consensus on any transactions
                 try {
@@ -96,6 +96,7 @@ public class ProposalRequestProcessor implements RequestProcessor {
                 } catch (XidRolloverException e) {
                     throw new RequestProcessorException(e.getMessage(), e);
                 }
+                // 经过了syncProcessor”处理的请求一定经过了"commitProcessor"的处理
                 // 事务请求需要syncProcessor进行处理
                 syncProcessor.processRequest(request);
             }
