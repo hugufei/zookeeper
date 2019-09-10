@@ -612,8 +612,9 @@ public class LearnerHandler extends ZooKeeperThread {
                 int cxid;
                 int type;
 
-                // 处理其他服务器的请求
+                // 处理服务器的其他请求
                 switch (qp.getType()) {
+                //接受到客户端的Ack请求
                 case Leader.ACK:
                     // 收到同步ack
                     if (this.learnerType == LearnerType.OBSERVER) {

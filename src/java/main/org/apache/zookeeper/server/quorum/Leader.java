@@ -622,7 +622,12 @@ public class Leader {
      *                the zxid of the proposal sent out
      * @param followerAddr
      */
-    // 针对提议回复ACK的处理逻辑，如果过半验证了就通知所有Learner
+    // 针对提议回复ACK的处理逻辑，同步等待过半验证了就通知所有Learner
+    // 调用处：
+    // 1）leader端：AckRequestProcessor调用了Leader#processAck
+    // 2）Follower端：SendAckRequestProcessor 发出ACK后，被服务端的LearnerHandler处理到，最终也是调用Leader#processAck，
+    //
+    // 说白了就是收集ACK，如果通过过半验证了，就告诉所有参与者commit，告诉所有observer INFORM，然后调用commitProcessor逻辑
     synchronized public void processAck(long sid, long zxid, SocketAddress followerAddr) {
         // log相关
         if (LOG.isTraceEnabled()) {
