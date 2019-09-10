@@ -37,16 +37,22 @@ public class ProposalRequestProcessor implements RequestProcessor {
 
     private static final Logger LOG = LoggerFactory.getLogger(ProposalRequestProcessor.class);
 
+    // leader角色才有这个请求处理器，这里能拿到LeaderZooKeeperServer
     LeaderZooKeeperServer zks;
-    
+
+    // 下一个处理器
     RequestProcessor nextProcessor;
 
+    // 同步处理器
     SyncRequestProcessor syncProcessor;
 
-    public ProposalRequestProcessor(LeaderZooKeeperServer zks,
-            RequestProcessor nextProcessor) {
+    // ProposalRequestProcessor --> CommitProcessor --> ToBeAppliedRequestProcessor --> FinalRequestProcessor
+    // syncProcessor  --> AckRequestProcessor
+    public ProposalRequestProcessor(LeaderZooKeeperServer zks, RequestProcessor nextProcessor) {
         this.zks = zks;
+        //一般是CommitProcessor
         this.nextProcessor = nextProcessor;
+        //syncProcessor的后续是AckRequestProcessor
         AckRequestProcessor ackProcessor = new AckRequestProcessor(zks.getLeader());
         syncProcessor = new SyncRequestProcessor(zks, ackProcessor);
     }
@@ -54,10 +60,12 @@ public class ProposalRequestProcessor implements RequestProcessor {
     /**
      * initialize this processor
      */
+    // 启动SyncRequestProcessor
     public void initialize() {
         syncProcessor.start();
     }
-    
+
+    // 请求处理流程
     public void processRequest(Request request) throws RequestProcessorException {
         // LOG.warn("Ack>>> cxid = " + request.cxid + " type = " +
         // request.type + " id = " + request.sessionId);
@@ -71,24 +79,30 @@ public class ProposalRequestProcessor implements RequestProcessor {
          * contain the handler. In this case, we add it to syncHandler, and 
          * call processRequest on the next processor.
          */
-        
+
+        // 如果是client的同步的请求
         if(request instanceof LearnerSyncRequest){
+            //特殊处理，不用走调用链的,根据lastProposed记录，processAck函数异步处理时时给对应的LearnerHandler发送Sync的消息
             zks.getLeader().processSync((LearnerSyncRequest)request);
         } else {
-            // 先交给下一个nextProcessor
-                nextProcessor.processRequest(request);
-            if (request.hdr != null) { // 如果是事务请求，Leader发出提议,集群进行投票
+            // 先交给下一个nextProcessor，一般是CommitProcessor处理。【加入CommitProcessor的queuedRequests队列】
+            nextProcessor.processRequest(request);
+            // //如果请求头不为空(是事务请求)
+            if (request.hdr != null) {
                 // We need to sync and get consensus on any transactions
                 try {
+                    // leader发出提议,集群进行投票
                     zks.getLeader().propose(request);
                 } catch (XidRolloverException e) {
                     throw new RequestProcessorException(e.getMessage(), e);
                 }
+                // 事务请求需要syncProcessor进行处理
                 syncProcessor.processRequest(request);
             }
         }
     }
 
+    // ProposalRequestProcessor后面两个Processor都要关闭
     public void shutdown() {
         LOG.info("Shutting down");
         nextProcessor.shutdown();
