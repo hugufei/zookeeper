@@ -227,7 +227,7 @@ public class Leader {
     /**
      * This is for follower to truncate its logs 
      */
-    // 用于触发Learner服务器进行内存数据库的回滚操作
+    //用于触发Learner服务器进行内存数据库的回滚操作
     // 回滚到某个zxid后，后面也会跟着一堆INFORM和COMMIT
     final static int TRUNC = 14;
     
@@ -648,7 +648,10 @@ public class Leader {
         }
     }
 
+    // 该处理器有一个toBeApplied队列，用来存储那些已经被CommitProcessor处理过的可被提交的Proposal。
+    // 其会将这些请求交付给FinalRequestProcessor处理器处理，待其处理完后，再将其从toBeApplied队列中移除。
     static class ToBeAppliedRequestProcessor implements RequestProcessor {
+
         private RequestProcessor next;
 
         private ConcurrentLinkedQueue<Proposal> toBeApplied;
@@ -844,8 +847,8 @@ public class Leader {
      * @param handler handler of the follower
      * @return last proposed zxid
      */
-    synchronized public long startForwarding(LearnerHandler handler,
-            long lastSeenZxid) {
+    // 让领导者知道跟随者能够跟随并完成同步
+    synchronized public long startForwarding(LearnerHandler handler, long lastSeenZxid) {
         // Queue up any outstanding requests enabling the receipt of
         // new requests
         if (lastProposed > lastSeenZxid) {
@@ -856,8 +859,7 @@ public class Leader {
                 handler.queuePacket(p.packet);
                 // Since the proposal has been committed we need to send the
                 // commit message also
-                QuorumPacket qp = new QuorumPacket(Leader.COMMIT, p.packet
-                        .getZxid(), null, null);
+                QuorumPacket qp = new QuorumPacket(Leader.COMMIT, p.packet.getZxid(), null, null);
                 handler.queuePacket(qp);
             }
             // Only participant need to get outstanding proposals
@@ -920,6 +922,9 @@ public class Leader {
     protected Set<Long> electingFollowers = new HashSet<Long>();
     // VisibleForTesting
     protected boolean electionFinished = false;
+
+
+    //等待Epoch的过半机制验证
     public void waitForEpochAck(long id, StateSummary ss) throws IOException, InterruptedException {
         synchronized(electingFollowers) {
             if (electionFinished) {
@@ -938,6 +943,7 @@ public class Leader {
                 }
             }
             QuorumVerifier verifier = self.getQuorumVerifier();
+            //验证通过则唤醒所有的LearnerHandler线程
             if (electingFollowers.contains(self.getId()) && verifier.containsQuorum(electingFollowers)) {
                 electionFinished = true;
                 electingFollowers.notifyAll();
@@ -945,6 +951,7 @@ public class Leader {
                 long start = Time.currentElapsedTime();
                 long cur = start;
                 long end = start + self.getInitLimit()*self.getTickTime();
+                //不验证通过则阻塞等待
                 while(!electionFinished && cur < end) {
                     electingFollowers.wait(end - cur);
                     cur = Time.currentElapsedTime();
@@ -1005,6 +1012,7 @@ public class Leader {
      *
      * LearnerHandler是一个线程，所有所有的LearnerHandler会公用一个leader
      */
+    // 处理给定sid的NEWLEADER确认并等待领导者收到*足够的ack。
     public void waitForNewLeaderAck(long sid, long zxid)
             throws InterruptedException {
 
@@ -1031,8 +1039,7 @@ public class Leader {
             }
 
             // 判断新leader这次投票的ack集合是否可以集群验证通过（过半）
-            if (self.getQuorumVerifier().containsQuorum(
-                    newLeaderProposal.ackSet)) {
+            if (self.getQuorumVerifier().containsQuorum(newLeaderProposal.ackSet)) {
                 quorumFormed = true;
                 newLeaderProposal.ackSet.notifyAll();
             } else {

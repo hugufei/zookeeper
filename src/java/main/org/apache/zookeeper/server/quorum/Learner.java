@@ -358,14 +358,16 @@ public class Learner {
         long newEpoch = ZxidUtils.getEpochFromZxid(newLeaderZxid);
         // In the DIFF case we don't need to do a snapshot because the transactions will sync on top of any existing snapshot
         // For SNAP and TRUNC the snapshot is needed to save that history
-        boolean snapshotNeeded = true;
-        readPacket(qp);
-        LinkedList<Long> packetsCommitted = new LinkedList<Long>();
 
+        boolean snapshotNeeded = true;
+        //第一步：获取数据同步的方式
+        readPacket(qp);
+
+        LinkedList<Long> packetsCommitted = new LinkedList<Long>();
         // 收到proposal但是还未commit的包
         LinkedList<PacketInFlight> packetsNotCommitted = new LinkedList<PacketInFlight>();
         synchronized (zk) {
-            // 接收diff，表示以diff方式与leader的数据同步
+            // 接收diff，表示以diff方式与leader的数据同步,则不需要快照，此时接收到的包需要写入事务日志
             if (qp.getType() == Leader.DIFF) {
                 LOG.info("Getting a diff from the leader 0x{}", Long.toHexString(qp.getZxid()));
                 snapshotNeeded = false;
@@ -416,6 +418,7 @@ public class Learner {
             boolean isPreZAB1_0 = true;
             //If we are not going to take the snapshot be sure the transactions are not applied in memory
             // but written out to the transaction log
+            //如果需要快照，则不写入事务日志，否则写入事务日志
             boolean writeToTxnLog = !snapshotNeeded;
             // we are now going to start getting transactions to apply followed by an UPTODATE
             outerLoop:
@@ -523,11 +526,12 @@ public class Learner {
                 }
             }
         }
-        // 不管是什么命令都会返回ack
+        // 最后再响应一个ack，这里一般是接收到UPTODATE之后
         ack.setZxid(ZxidUtils.makeZxid(newEpoch, 0));
-        // 最后再发一个ack
         writePacket(ack, true);
         sock.setSoTimeout(self.tickTime * self.syncLimit);
+
+
         // 服务器初始化，和单机模式一样的了
         zk.startup();
         /*

@@ -72,7 +72,10 @@ public class ZKDatabase {
     protected long minCommittedLog, maxCommittedLog;
     public static final int commitLogCount = 500;
     protected static int commitLogBuffer = 700;
+
+    //历史提交记录，最多保存500个，数据会比快照里的新
     protected LinkedList<Proposal> committedLog = new LinkedList<Proposal>();
+
     protected ReentrantReadWriteLock logLock = new ReentrantReadWriteLock();
     volatile private boolean initialized = false;
     

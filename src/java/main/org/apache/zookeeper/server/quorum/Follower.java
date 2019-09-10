@@ -72,12 +72,12 @@ public class Follower extends Learner{
         self.end_fle = 0;
         fzk.registerJMX(new FollowerBean(this, zk), self.jmxLocalPeerBean);
         try {
-            //找到Leader服务器
+            //1、找到Leader服务器
             QuorumServer leaderServer = findLeader();            
             try {
-                // 其Leader服务器建立连接
+                // 2、与Leader服务器建立连接
                 connectToLeader(leaderServer.addr, leaderServer.hostname); // 连接leader
-                // 会向Leader进行注册，即将Learner服务器的基本信息（LearnerInfo），包括SID和ZXID，发送给Leader服务器。
+                // 3、向Leader进行注册，即将Learner服务器的基本信息（LearnerInfo），包括SID和ZXID，发送给Leader服务器。
                 long newEpochZxid = registerWithLeader(Leader.FOLLOWERINFO); // 发送
 
                 //check to see if the leader zxid is lower than ours

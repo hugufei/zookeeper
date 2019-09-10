@@ -28,6 +28,7 @@ import org.apache.zookeeper.ZooDefs.OpCode;
 import org.apache.zookeeper.server.Request;
 import org.apache.zookeeper.server.RequestProcessor;
 
+//其承担了事务日志记录反馈的角色，在完成事务日志记录后，会向Leader服务器发送ACK消息以表明自身完成了事务日志的记录工作。
 public class SendAckRequestProcessor implements RequestProcessor, Flushable {
     private static final Logger LOG = LoggerFactory.getLogger(SendAckRequestProcessor.class);
     

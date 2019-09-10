@@ -91,8 +91,8 @@ public class LearnerHandler extends ZooKeeperThread {
     /**
      * The packets to be sent to the learner
      */
-    final LinkedBlockingQueue<QuorumPacket> queuedPackets =
-        new LinkedBlockingQueue<QuorumPacket>();
+    //数据同步阶段，发送给learner的包队列
+    final LinkedBlockingQueue<QuorumPacket> queuedPackets = new LinkedBlockingQueue<QuorumPacket>();
 
     /**
      * This class controls the time that the Leader has been
@@ -324,6 +324,7 @@ public class LearnerHandler extends ZooKeeperThread {
             bufferedOutput = new BufferedOutputStream(sock.getOutputStream());
             oa = BinaryOutputArchive.getArchive(bufferedOutput);
 
+            //读到Follower发来的FOLLOWERINFO信息
             QuorumPacket qp = new QuorumPacket();
             ia.readRecord(qp, "packet");
             if(qp.getType() != Leader.FOLLOWERINFO && qp.getType() != Leader.OBSERVERINFO){
@@ -331,6 +332,7 @@ public class LearnerHandler extends ZooKeeperThread {
                         + " is not FOLLOWERINFO or OBSERVERINFO!");
                 return;
             }
+            //获取Follower的服务id
             byte learnerInfoData[] = qp.getData();
             if (learnerInfoData != null) {
             	if (learnerInfoData.length == 8) {
@@ -382,8 +384,7 @@ public class LearnerHandler extends ZooKeeperThread {
                 ia.readRecord(ackEpochPacket, "packet");
                 // ack不对则报错
                 if (ackEpochPacket.getType() != Leader.ACKEPOCH) {
-                    LOG.error(ackEpochPacket.toString()
-                            + " is not ACKEPOCH");
+                    LOG.error(ackEpochPacket.toString()+ " is not ACKEPOCH");
                     return;
 				}
                 ByteBuffer bbepoch = ByteBuffer.wrap(ackEpochPacket.getData());
@@ -402,7 +403,7 @@ public class LearnerHandler extends ZooKeeperThread {
             /* we are sending the diff check if we have proposals in memory to be able to 
              * send a diff to the 
              */
-            // 加读锁，这段时间内只能读，不能写
+            // 加读锁，同步过程中只能读，不能写
             ReentrantReadWriteLock lock = leader.zk.getZKDatabase().getLogLock();
             ReadLock rl = lock.readLock();
             try {
@@ -470,7 +471,7 @@ public class LearnerHandler extends ZooKeeperThread {
                                     }
                                 }
                                 queuePacket(propose.packet);
-                                //
+                                //在队列中加入COMMIT包，让
                                 QuorumPacket qcommit = new QuorumPacket(Leader.COMMIT, propose.packet.getZxid(),
                                         null, null);
                                 queuePacket(qcommit);
@@ -494,17 +495,17 @@ public class LearnerHandler extends ZooKeeperThread {
                 }               
 
                 LOG.info("Sending " + Leader.getPacketType(packetToSend));
-                // 发送同步数据
+                // 让领导者知道跟随者能够跟随并完成同步
                 leaderLastZxid = leader.startForwarding(this, updates);
 
             } finally {
                 rl.unlock();
             }
 
-            // 生成NEWLEADER的packet,发给learner代表自己需要同步的信息发完了
-             QuorumPacket newLeaderQP = new QuorumPacket(Leader.NEWLEADER,
-                    ZxidUtils.makeZxid(newEpoch, 0), null, null);
-             if (getVersion() < 0x10000) {
+            // 生成NEWLEADER的packet,发给learner代表自己需要同步的信息处理完了
+            QuorumPacket newLeaderQP = new QuorumPacket(Leader.NEWLEADER, ZxidUtils.makeZxid(newEpoch, 0), null, null);
+            //这个版本判断什么意思？？？
+            if (getVersion() < 0x10000) {
                 oa.writeRecord(newLeaderQP, "packet");
             } else {
                  // 加入发送队列
@@ -515,7 +516,7 @@ public class LearnerHandler extends ZooKeeperThread {
             if (packetToSend == Leader.SNAP) { //如果是SNAP同步，获取zxid
                 zxidToSend = leader.zk.getZKDatabase().getDataTreeLastProcessedZxid();
             }
-            // 写发送类型，再发送数据
+            // 写发送同步类型和zxid
             oa.writeRecord(new QuorumPacket(packetToSend, zxidToSend, null, null), "packet");
             bufferedOutput.flush();
             
@@ -553,6 +554,7 @@ public class LearnerHandler extends ZooKeeperThread {
              * the leader is ready, and only then we can
              * start processing messages.
              */
+            //阻塞等待Follower返回的第一个Ack响应
             qp = new QuorumPacket();
             ia.readRecord(qp, "packet");
             if(qp.getType() != Leader.ACK){
@@ -560,9 +562,10 @@ public class LearnerHandler extends ZooKeeperThread {
                 return;
             }
             LOG.info("Received NEWLEADER-ACK message from " + getSid());
-            leader.waitForNewLeaderAck(getSid(), qp.getZxid()); //等待有过半参与者返回ACK
-            // 上面代码之后代表leader与learner直接初始化完成了
+            //等待有过半参与者返回ACK
+            leader.waitForNewLeaderAck(getSid(), qp.getZxid());
 
+            // 上面代码之后代表leader与learner直接初始化完成了
             // 正常同步开启
             syncLimitCheck.start();
             
@@ -573,6 +576,7 @@ public class LearnerHandler extends ZooKeeperThread {
             /*
              * Wait until leader starts up
              */
+            //等待leader初始化完成
             synchronized(leader.zk){
                 while(!leader.zk.isRunning() && !this.isInterrupted()){
                     leader.zk.wait(20);
@@ -582,7 +586,7 @@ public class LearnerHandler extends ZooKeeperThread {
             // so we need to mark when the peer can actually start
             // using the data
             //
-            // 发送update代表过半的机器回复了NEWLEADER的ACK，可以开始接受请求了
+            // 发送UPTODATE代表过半的机器回复了NEWLEADER的ACK，可以开始接受请求了
             queuedPackets.add(new QuorumPacket(Leader.UPTODATE, -1, null, null));
 
             //正常交互，处理learner的请求等

@@ -29,9 +29,13 @@ import org.slf4j.LoggerFactory;
  * This RequestProcessor simply forwards requests to an AckRequestProcessor and
  * SyncRequestProcessor.
  */
+//事务投票处理器。Leader服务器事务处理流程的发起者:
+// 1) 对于非事务性请求，ProposalRequestProcessor会直接将请求转发到CommitProcessor处理器，不再做任何处理，
+// 2) 而对于事务性请求，除了将请求转发到CommitProcessor外，还会根据请求类型创建对应的Proposal提议，并发送给所有的Follower服务器来发起一次集群内的事务投票。
+// 3) 同时，ProposalRequestProcessor还会将事务请求交付给SyncRequestProcessor进行事务日志的记录。
 public class ProposalRequestProcessor implements RequestProcessor {
-    private static final Logger LOG =
-        LoggerFactory.getLogger(ProposalRequestProcessor.class);
+
+    private static final Logger LOG = LoggerFactory.getLogger(ProposalRequestProcessor.class);
 
     LeaderZooKeeperServer zks;
     
