@@ -362,7 +362,9 @@ public class LearnerHandler extends ZooKeeperThread {
             StateSummary ss = null;
             long zxid = qp.getZxid();
 
+            // 阻塞等待生成最新Epoch
             // 如果learner的epoch比自己高，更新自己的
+            // 通过过半验证后后唤醒Leader线程和其他的LearnerHandler线程
             long newEpoch = leader.getEpochToPropose(this.getSid(), lastAcceptedEpoch);
             
             if (this.getVersion() < 0x10000) {

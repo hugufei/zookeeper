@@ -23,6 +23,8 @@ package org.apache.zookeeper.server.quorum;
  * how two different states are compared.
  */
 public class StateSummary {
+	// CurrentEpoch是当前周期，AcceptedEpoch是即将成为的周期
+	// 前者相当于最终决定，后者相当于决定前的提议(个人理解)
 	private long currentEpoch;
 	private long lastZxid;
 	public StateSummary(long currentEpoch, long lastZxid) {

@@ -533,7 +533,10 @@ public class Learner {
 
 
         // 服务器初始化，和单机模式一样的了
+        // 对应的LearnerHandler知道了Leader满足了上述条件，给Learner发送UPTODATE消息，
+        // Learner知道过半机器都认可了Leader的数据，即可启动
         zk.startup();
+
         /*
          * Update the election vote here to ensure that all members of the
          * ensemble report the same vote to new servers that start up and

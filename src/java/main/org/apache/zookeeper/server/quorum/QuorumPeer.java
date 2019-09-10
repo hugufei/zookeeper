@@ -1494,6 +1494,7 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
 
     //接下来接收或者要成为epoch，会变动，稳定了之后就成了currentEpoch
     private long acceptedEpoch = -1;
+
     //当前所处的epoch，是稳定的，每次acceptedEpoch比较完了最终确定了之后会赋值给currentEpoch
     private long currentEpoch = -1;
 
