@@ -622,7 +622,7 @@ public class Leader {
      *                the zxid of the proposal sent out
      * @param followerAddr
      */
-    // 针对提议回复ACK的处理逻辑，同步等待过半验证了就通知所有Learner
+    // 针对提议回复ACK的处理逻辑，过半验证了就通知所有Learner[]
     // 调用处：
     // 1）leader端：AckRequestProcessor调用了Leader#processAck
     // 2）Follower端：SendAckRequestProcessor 发出ACK后，被服务端的LearnerHandler处理到，最终也是调用Leader#processAck，

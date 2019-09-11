@@ -122,7 +122,7 @@ public class QuorumCnxManager {
      */
     private AtomicInteger connectionThreadCnt = new AtomicInteger(0);
 
-    // 每台目标服务器sid  对应的SendWorker
+    // 每台目标服务器sid  对应的SendWorker和RecvWorker
     final ConcurrentHashMap<Long, SendWorker> senderWorkerMap;
     // 每台目标服务器sid  对应的需要发送的消息队列
     final ConcurrentHashMap<Long, ArrayBlockingQueue<ByteBuffer>> queueSendMap;

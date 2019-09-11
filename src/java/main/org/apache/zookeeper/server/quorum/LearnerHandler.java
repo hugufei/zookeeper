@@ -669,6 +669,7 @@ public class LearnerHandler extends ZooKeeperThread {
                     queuedPackets.add(qp);
                     break;
                 case Leader.REQUEST:
+                    // 接受到Learnner转发的REQUEST请求
                     // 这里有一个问题，作为Leanner它是怎么把这个request发出来的，应该要用到QuorumServer中的同步端口
                     bb = ByteBuffer.wrap(qp.getData());
                     sessionId = bb.getLong();

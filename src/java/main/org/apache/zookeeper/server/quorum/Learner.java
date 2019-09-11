@@ -205,6 +205,7 @@ public class Learner {
         }
         oa.close();
         QuorumPacket qp = new QuorumPacket(Leader.REQUEST, -1, baos.toByteArray(), request.authInfo);
+        //转发给Leader，看LearnHandler的处理逻辑
         writePacket(qp, true);
     }
     

@@ -85,7 +85,8 @@ public class ProposalRequestProcessor implements RequestProcessor {
             //特殊处理，不用走调用链的,根据lastProposed记录，processAck函数异步处理时时给对应的LearnerHandler发送Sync的消息
             zks.getLeader().processSync((LearnerSyncRequest)request);
         } else {
-            // 先交给下一个nextProcessor，一般是CommitProcessor处理。【加入CommitProcessor的queuedRequests队列】
+            // 先交给下一个nextProcessor，一般是CommitProcessor处理。
+            // 【加入CommitProcessor的queuedRequests队列, 线程会阻塞等待投票结果】
             nextProcessor.processRequest(request);
             // 如果请求头不为空(是事务请求)
             if (request.hdr != null) {

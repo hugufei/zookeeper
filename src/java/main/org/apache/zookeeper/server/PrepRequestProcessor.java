@@ -598,7 +598,7 @@ public class PrepRequestProcessor extends ZooKeeperCriticalThread implements Req
         try {
             //根据request.type区分是否是事务请求
             switch (request.type) {
-                case OpCode.create:
+            case OpCode.create:
                 CreateRequest createRequest = new CreateRequest();
                 // 如果是事务请求，调用pRequest2Txn 【注意zxid的生成】
                 pRequest2Txn(request.type, zks.getNextZxid(), request, createRequest, true);
