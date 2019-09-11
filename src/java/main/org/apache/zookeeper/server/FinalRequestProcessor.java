@@ -76,9 +76,12 @@ import org.apache.zookeeper.OpResult.ErrorResult;
  * outstandingRequests member of ZooKeeperServer.
  */
 // 用来进行客户端请求返回之前的操作，包括创建客户端请求的响应，针对事务请求，该处理还会负责将事务应用到内存数据库中去。
+// 是处理链的最后一环。
 public class FinalRequestProcessor implements RequestProcessor {
+
     private static final Logger LOG = LoggerFactory.getLogger(FinalRequestProcessor.class);
 
+    // zk服务器
     ZooKeeperServer zks;
 
     public FinalRequestProcessor(ZooKeeperServer zks) {
@@ -86,6 +89,10 @@ public class FinalRequestProcessor implements RequestProcessor {
     }
 
     // 请求后置处理器
+    // 1) 针对事务请求，完成事务的处理
+    // 2) 对于非事务请求，完成对应处理
+    // 3) serverStat进行对应更新，延迟，数量等等
+    // 4) cnxn发送回复消息
     public void processRequest(Request request) {
         if (LOG.isDebugEnabled()) {
             LOG.debug("Processing request:: " + request);
@@ -104,7 +111,9 @@ public class FinalRequestProcessor implements RequestProcessor {
         synchronized (zks.outstandingChanges) {
             while (!zks.outstandingChanges.isEmpty()
                     && zks.outstandingChanges.get(0).zxid <= request.zxid) {
+                // 之前在PrepRequestProcessor.addChangeRecord()时生产该队列
                 ChangeRecord cr = zks.outstandingChanges.remove(0);
+                // 只会出现>= (当前请求是事务请求，按照顺序应该是=，如果不是的话，应该是> )
                 if (cr.zxid < request.zxid) {
                     LOG.warn("Zxid outstanding "
                             + cr.zxid
@@ -114,20 +123,23 @@ public class FinalRequestProcessor implements RequestProcessor {
                     zks.outstandingChangesForPath.remove(cr.path);
                 }
             }
+            // 如果是事务
             if (request.hdr != null) {
                TxnHeader hdr = request.hdr;
                Record txn = request.txn;
-               //处理事务
+               // 处理事务,得到结果
                rc = zks.processTxn(hdr, txn);
             }
             // do not add non quorum packets to the queue.
             // 添加提交历史
             if (Request.isQuorum(request.type)) {
+                // 存最近的500次提交记录，数据同步的时候会用到
                 zks.getZKDatabase().addCommittedProposal(request);
             }
         }
 
-        //关闭NIOServerCnxn
+        // 处理closeSession
+        // 关闭NIOServerCnxn
         if (request.hdr != null && request.hdr.getType() == OpCode.closeSession) {
             ServerCnxnFactory scxn = zks.getServerCnxnFactory();
             // this might be possible since
@@ -137,6 +149,7 @@ public class FinalRequestProcessor implements RequestProcessor {
                 // close session response being lost - we've already closed
                 // the session/socket here before we can send the closeSession
                 // in the switch block below
+
                 // 从NIOServerCnxnFactory找到该会话对应的NIOServerCnxn，将其关闭。
                 scxn.closeSession(request.sessionId);
                 return;
@@ -161,6 +174,7 @@ public class FinalRequestProcessor implements RequestProcessor {
 
             KeeperException ke = request.getException();
             if (ke != null && request.type != OpCode.multi) {
+                //有异常就抛异常
                 throw ke;
             }
 
@@ -169,12 +183,14 @@ public class FinalRequestProcessor implements RequestProcessor {
             }
             switch (request.type) {
             case OpCode.ping: {
+                //更新延迟统计数据
                 zks.serverStats().updateLatency(request.createTime);
 
                 lastOp = "PING";
                 cnxn.updateStatsForResponse(request.cxid, request.zxid, lastOp,
                         request.createTime, Time.currentElapsedTime());
 
+                //回复更新同种统计
                 cnxn.sendResponse(new ReplyHeader(-2,
                         zks.getZKDatabase().getDataTreeLastProcessedZxid(), 0), null, "response");
                 return;
@@ -185,7 +201,7 @@ public class FinalRequestProcessor implements RequestProcessor {
                 lastOp = "SESS";
                 cnxn.updateStatsForResponse(request.cxid, request.zxid, lastOp,
                         request.createTime, Time.currentElapsedTime());
-
+                //结束会话初始化
                 zks.finishSessionInit(request.cnxn, true);
                 return;
             }
@@ -410,6 +426,7 @@ public class FinalRequestProcessor implements RequestProcessor {
         }
     }
 
+    // 不含线程方法，也没有nextProcessor，打个log就行
     public void shutdown() {
         // we are the final link in the chain
         LOG.info("shutdown of request processor complete");
