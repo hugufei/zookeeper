@@ -622,7 +622,7 @@ public class Leader {
      *                the zxid of the proposal sent out
      * @param followerAddr
      */
-    // 针对提议回复ACK的处理逻辑，过半验证了就通知所有Learner[]
+    // 针对提议回复ACK的处理逻辑，过半验证了就通知所有Learner
     // 调用处：
     // 1）leader端：AckRequestProcessor调用了Leader#processAck
     // 2）Follower端：SendAckRequestProcessor 发出ACK后，被服务端的LearnerHandler处理到，最终也是调用Leader#processAck，
@@ -713,8 +713,10 @@ public class Leader {
     // 其会将这些请求交付给FinalRequestProcessor处理器处理，待其处理完后，再将其从toBeApplied队列中移除。
     static class ToBeAppliedRequestProcessor implements RequestProcessor {
 
+        //下一个肯定是FinalRequestProcessor
         private RequestProcessor next;
 
+        //注意是concurrent的
         private ConcurrentLinkedQueue<Proposal> toBeApplied;
 
         /**
@@ -728,6 +730,7 @@ public class Leader {
          */
         ToBeAppliedRequestProcessor(RequestProcessor next,
                 ConcurrentLinkedQueue<Proposal> toBeApplied) {
+            //下一个必须是FinalRequestProcessor
             if (!(next instanceof FinalRequestProcessor)) {
                 throw new RuntimeException(ToBeAppliedRequestProcessor.class
                         .getName()
@@ -751,6 +754,7 @@ public class Leader {
             Proposal p = toBeApplied.peek();
             if (p != null && p.request != null
                     && p.request.zxid == request.zxid) {
+                //进行相关清除操作
                 toBeApplied.remove();
             }
         }

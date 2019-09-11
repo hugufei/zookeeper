@@ -88,6 +88,8 @@ public class FastLeaderElection implements Election {
      */
 
     //这个类用于包装接收到的数据
+    // electionEpoch: 发出Notification的server的logicalclock
+
     static public class Notification {
         /*
          * Format version, introduced in 3.4.6
@@ -107,7 +109,7 @@ public class FastLeaderElection implements Election {
         long zxid;
 
         /*
-         * Epoch
+         * 发出Notification的server的logicalclock
          */
         long electionEpoch;
 
@@ -188,21 +190,25 @@ public class FastLeaderElection implements Election {
         /*
          * Proposed leader in the case of notification
          */
+        // 当前服务器提议的领导者
         long leader;
 
         /*
          * id contains the tag for acks, and zxid for notifications
          */
+        // 当前服务器的事务id
         long zxid;
 
         /*
          * Epoch
+         * 当前服务器所处的选择周期-逻辑时钟
          */
         long electionEpoch;
 
         /*
          * Current state;
          */
+        //当前服务器的状态
         QuorumPeer.ServerState state;
 
         /*
@@ -213,6 +219,8 @@ public class FastLeaderElection implements Election {
         
         /*
          * Leader epoch
+         *
+         * 当前服务器所处的当前周期,用于判断各个server所处的周期，从log中读取currentEpoch
          */
         long peerEpoch;
     }
@@ -529,6 +537,7 @@ public class FastLeaderElection implements Election {
     Messenger messenger;
 
     // 逻辑时钟，相当于投票轮次
+    // 当前Server所处的选举的轮次，每次调用lookForLeader()方法，它的值都会加一．
     AtomicLong logicalclock = new AtomicLong(); /* Election instance */
 
     // 提议的leader
@@ -872,10 +881,10 @@ public class FastLeaderElection implements Election {
            self.start_fle = Time.currentElapsedTime();
         }
         try {
-            //本轮次逻辑时钟, 接收到的投票集合
+            //本轮次逻辑时钟, 接收到处理looking状态的机器的投票集合
             HashMap<Long, Vote> recvset = new HashMap<Long, Vote>();  //投票箱，key:其他服务器sid，Vote
 
-            //选举之外的投票集合(即对方为following和leading状态)
+            //本轮次逻辑时钟,接收到处于following和leading状态的投票集合
             HashMap<Long, Vote> outofelection = new HashMap<Long, Vote>();
 
             //连续多次等待通知都没有等到，等待通知的时长变化如何
